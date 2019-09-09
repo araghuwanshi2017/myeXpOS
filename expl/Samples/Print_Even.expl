@@ -1,0 +1,13 @@
+int main()
+{
+	decl
+		int even;
+	enddecl
+	begin
+		even = 2;
+		while(even <= 100) do
+			even = even + 2;
+		endwhile;
+		return 0;
+	end
+}

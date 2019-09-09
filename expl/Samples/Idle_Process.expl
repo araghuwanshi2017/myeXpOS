@@ -1,0 +1,15 @@
+int main()
+{
+	decl
+		str P;
+		int tmp , a , b , c;
+	enddecl
+	begin
+		breakpoint;
+		while(1 == 1) do
+			a = 1;
+		breakpoint;
+		endwhile;
+		return 0;
+	end
+}

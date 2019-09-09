@@ -1,0 +1,36 @@
+decl
+	int gcd(int a , int b);
+enddecl
+
+int gcd(int a , int b)
+{
+	decl 
+		int ans;
+	enddecl
+
+	begin
+		if((a) == 0) then
+			ans = b;
+		else
+			ans = gcd(b % a , a);
+		endif;
+		return ans;
+	end
+}
+int main()
+{
+	decl 
+		int tmp , a , b , ans;
+	enddecl
+	begin
+
+		tmp = exposcall("Write" , -2 , "Enter A");
+		tmp = exposcall("Read" , -1 , a);
+		
+		tmp = exposcall("Write" , -2 , "Enter B");
+		tmp = exposcall("Read" , -1 , b);
+		ans = gcd(a , b);
+		tmp = exposcall("Write" , -2, ans);
+		return 0;
+	end
+}

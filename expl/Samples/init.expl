@@ -1,0 +1,25 @@
+
+//*********************************** INIT (LOGIN) USER PROGRAM ************************************* 
+int main()
+{
+    decl
+        str P;
+        int temp, num, N , a;
+    enddecl
+begin
+    
+    P = "Enter Size";
+    temp = exposcall("Write" , -2 , P);
+
+    temp = exposcall("Read" , -1,  N);
+    num = 0;
+    while(num < N) do
+        P = "Enter Element";
+        temp = exposcall ( "Write" , -2 ,  P);
+        temp = exposcall ( "Read" , -1,  a);
+        num = num + 1;
+    endwhile;
+
+    return 0;
+end
+}

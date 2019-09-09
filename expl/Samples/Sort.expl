@@ -1,0 +1,40 @@
+decl
+	int arr[5];
+enddecl
+int main()
+{
+	decl
+		str P;
+		int tmp , i , key , j , n;
+	enddecl
+	begin
+		P = "Enter Size";
+		tmp = exposcall("Write" , -2 , P);
+		tmp = exposcall("Read" , -1 , n);
+		i = 0;
+		P = "Array";
+		while(i < n) do
+			tmp = exposcall("Write" , -2 , P);
+			tmp = exposcall("Read" , -1 , key);
+			arr[i] = key;
+			i = i + 1;
+		endwhile;
+		i = 1;
+		while(i < n) do
+			key = arr[i];
+			j = i - 1;
+			while((j >= 0) AND (arr[j] > key)) do
+				arr[j + 1] = arr[j];
+				j = j - 1;
+			endwhile;
+			arr[j + 1] = key;
+		i = i + 1;
+		endwhile;
+		i = 0;
+		while(i < n) do
+			tmp = exposcall("Write" ,-2 , arr[i]);
+			i = i + 1;
+		endwhile;
+	return 0;
+	end
+}

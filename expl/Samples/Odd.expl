@@ -1,0 +1,18 @@
+int main()
+{
+	decl
+		str P;
+		int tmp , Odd ,n;
+	enddecl
+	begin
+		P = "Enter N";
+		tmp = exposcall("Write" , -2 , P);
+		tmp = exposcall("Read" , -1 , n);
+		Odd = 1;
+		while(Odd <= n)	do
+			tmp = exposcall("Write" , -2 , Odd);
+			Odd = Odd + 2;
+		endwhile;
+		return 0;
+	end
+}

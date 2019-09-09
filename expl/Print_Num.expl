@@ -1,0 +1,15 @@
+int main()
+{
+	decl
+		int tmp , temp , num;
+	enddecl
+	begin
+		tmp = exposcall("Read" , -2);
+		num = 1;
+		while(num <= tmp) do
+			temp = exposcall("Write" , -2 , num);
+			num = num + 1;
+		endwhile;
+		return 0;
+	end
+}		

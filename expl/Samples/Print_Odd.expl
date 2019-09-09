@@ -1,0 +1,13 @@
+int main()
+{
+	decl
+		int odd;
+	enddecl
+	begin
+		odd = 1;
+		while(odd <= 100) do
+			odd = odd + 2;
+		endwhile;
+		return 0;
+	end
+}

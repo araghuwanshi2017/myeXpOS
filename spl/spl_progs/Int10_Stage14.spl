@@ -1,0 +1,23 @@
+//*********************************** INTERRUPT 10 (EXIT SYSTEM CALL) *************************************
+
+alias counter R0;
+
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16)  + 4] = TERMINATED;
+
+counter = 1;
+while(counter <= 15) do
+	if([PROCESS_TABLE + counter * 16 + 4] != TERMINATED) then
+		call MOD_5;
+	endif;
+	counter = counter + 1;
+
+
+endwhile;
+
+if(counter == 16) then
+	halt;
+endif;
+
+// ****************
+
+
