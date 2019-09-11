@@ -1,0 +1,82 @@
+//Function Number	 Function Name	        Arguments	Return Value
+//GET_PCB_ENTRY = 1	 Get Pcb Entry	        NIL	        Index of Free PCB
+//FREE_USER_AREA_PAGE=2  Free User Area Page	PID	        NIL
+//EXIT_PROCESS = 3	 Exit Process	        PID	        NIL
+//FREE_PAGE_TABLE = 4	 Free Page Table        PID	        NIL
+//KILL_ALL = 5	         Kill All               PID     	NIL 
+
+// ************************* MODULE 1 (PROCESS_MANAGER_MODULE) **************************
+
+alias func_Num R1;
+alias currentPID R2;
+
+if(func_Num == 2) then
+// *** Invoke Release Page ***
+	backup;
+
+	R1 = 2; //Func Number For Release Page
+	R2 = [PROCESS_TABLE + (currentPID * 16) + 11];
+	call MOD_2;
+	restore;
+// ****
+	return;
+endif;
+
+if(func_Num == 3) then
+
+// *** Invoke Free Page Table ***
+	backup;
+	R1 = 4; //Func Number For Free Page Table
+	R2 = currentPID; // PID
+	call MOD_1;
+	restore;
+
+// ****
+
+// *** Invoke Free User Area Page ***
+	backup;
+	
+	R1 = 2; // Func Number For Free User Area Page
+	R2 = currentPID;
+	call MOD_1;
+	restore;
+	
+// ****
+	[PROCESS_TABLE + (currentPID * 16) + 4] = TERMINATED;	
+	return;
+endif;
+
+if(func_Num == 4) then
+	backup;
+	PTBR = PAGE_TABLE_BASE + (currentPID * 20);
+	
+// Invalidating Library
+	[PTBR + 0] = -1; // 
+	[PTBR + 1] = "0000"; // Auxillary Bits
+	[PTBR + 2] = -1;
+	[PTBR + 3] = "0000";
+
+
+// Invalidating Stack , Heap and Code_Pages
+	alias i R3;
+	i = 4;
+	while(i <= 18) do
+		if([PTBR + i] != -1) then // For Valid Page
+			backup;
+	
+			R1 = 2;
+			R2 = [PTBR + i]; //Page_Num
+			call MOD_2;
+			[PTBR + i] = -1;
+			[PTBR + i + 1] = "0000";
+			restore;
+		endif;
+		i = i + 2;
+	endwhile;
+
+	restore;
+
+	return ;
+endif;
+
+// ********_________********

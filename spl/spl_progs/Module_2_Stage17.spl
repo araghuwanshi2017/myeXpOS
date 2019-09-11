@@ -1,0 +1,75 @@
+//Function Number	Function Name	Arguments	   Return Value
+//GET_FREE_PAGE = 1	Get Free Page	NIL	    	   Free Page number
+//RELEASE_PAGE = 2	Release Page	Page Number	   NIL
+//GET_FREE_BLOCK = 3	Get Free Block	NIL		   Free Block Number or -1
+//RELEASE_BLOCK = 4	Release Block	Block Number, PID  NIL
+//GET_CODE_PAGE = 5	Get Code Page	Block Number	   Page Number
+//GET_SWAP_BLOCK = 6	Get Swap Block	NIL		   Block Number
+
+
+// ************************** MODULE 2 (MEMORY MANAGER MODULE) ***************************
+
+alias Func_Num R1;
+alias get_Released R2;
+
+// *** Get_Free_Page *** (Final Version)
+
+if(Func_Num == 1) then
+	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
+	
+	while([SYSTEM_STATUS_TABLE + 2] == 0) do
+		[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 4] = WAIT_MEM;
+		call MOD_5;		
+	endwhile;
+
+	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1; //Wait_Mem_Count;
+	[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1; //Mem_Free_Count;
+	
+	alias page_Index R3;
+	page_Index = 76;
+	while(page_Index < 128) do	
+		if([MEMORY_FREE_LIST + page_Index] == 0) then
+			[MEMORY_FREE_LIST + page_Index] = 1;
+			R0 = page_Index;
+			return;
+		endif;		
+		page_Index = page_Index + 1;
+	endwhile;
+
+	return;
+
+endif;
+
+// ****
+
+// *** Release_Page *** (Final Version)
+if(Func_Num == 2) then
+	backup; 
+	[MEMORY_FREE_LIST + get_Released]  = [MEMORY_FREE_LIST + get_Released] - 1;
+	
+	if([MEMORY_FREE_LIST + get_Released] == 0) then
+		[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1; //Increment Mem_Free_Count
+
+		alias i R4;
+		i = 0;
+		while(i < 16) do
+			if([PROCESS_TABLE + (i * 16) + 4] == WAIT_MEM) then
+				[PROCESS_TABLE + (i * 16) + 4] = READY;
+			endif;
+			i = i + 1;	
+		endwhile;
+	endif;
+
+	restore;
+	return;
+endif;
+
+// ****
+
+
+// ********_________********
+		
+		
+
+
+

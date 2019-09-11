@@ -1,0 +1,146 @@
+
+//*********************************** MODULE 7 (BOOT MODULE)********************
+
+// *** Exception Handler ***
+loadi(2, 15);
+loadi(3, 16);
+
+// *** Load Timer Interrupt **
+loadi(4 , 17);
+loadi(5 , 18);
+
+// *** Load Console Interrupt ***
+loadi(8 , 21);
+loadi(9 , 22);
+
+// *** Load INT [4 - 18] ***
+
+// *** Load Int 6 ***
+loadi(14 , 27);
+loadi(15 , 28);
+
+// *** Load Int 7 ***
+loadi(16, 29);
+loadi(17, 30);
+
+// *** Load Int 9 ***
+loadi(20 , 33);
+loadi(21 , 34);
+
+// *** Load INT 10 ***
+loadi(22,35);
+loadi(23,36);
+
+//**********
+
+// *** Load Modules From Disk To Memory MOD [0 - 7] ***
+
+// Module 0 (Resource_Manager) ***
+loadi(40 , 53);
+loadi(41 , 54);
+
+// Module 1 (Process_Manager) ***
+loadi(42 , 55);
+loadi(43 , 56);
+
+// Module 2 (Memory_Manager) ***
+loadi(44 , 57);
+loadi(45 , 58);
+
+// Module 4 (Device Manager) ***
+loadi(48 , 61);
+loadi(49 , 62);
+
+// **********
+
+// *** Load Inode_Table ***
+loadi(59 , 3);
+loadi(60 , 4);
+
+// ****
+
+// *** Library Load ***
+loadi(63 , 13);
+loadi(64 , 14);
+
+// *** Init/Login ***
+loadi(65 , 7);
+loadi(66 , 8);
+
+[TERMINAL_STATUS_TABLE] = 0; // Setting Terminal Free
+
+PTBR = PAGE_TABLE_BASE + 20;
+PTLR = 10;
+
+//Library
+[PTBR + 0] = 63;
+[PTBR + 1] = "0100";
+[PTBR + 2] = 64;
+[PTBR + 3] = "0100";
+
+
+//Heap
+[PTBR + 4] = 78;
+[PTBR + 5] = "0110";
+[PTBR + 6] = 79;
+[PTBR + 7] = "0110";
+
+
+//Code
+[PTBR + 8] = 65;
+[PTBR + 9] = "0100";
+[PTBR + 10] = 66;
+[PTBR + 11] = "0100";
+[PTBR + 12] = -1;
+[PTBR + 13] = "0000";
+[PTBR + 14] = -1;
+[PTBR + 15] = "0000";
+
+//Stack
+[PTBR + 16] = 76;
+[PTBR + 17] = "0110";
+[PTBR + 18] = 77;
+[PTBR + 19] = "0110";
+
+
+//INIT Process Ist
+[76 * 512] = [65 * 512 + 1];
+
+[PROCESS_TABLE  + 16 + 1] = 1;
+[PROCESS_TABLE  + 16 + 4] = CREATED;
+[PROCESS_TABLE  + 16 + 11] = 80;
+[PROCESS_TABLE  + 16 + 12] = 0;
+[PROCESS_TABLE  + 16 + 13] = 8*512;
+[PROCESS_TABLE  + 16 + 14] = PAGE_TABLE_BASE + 20;
+[PROCESS_TABLE  + 16 + 15] = 10;
+
+alias counter R0;
+counter = 2;
+while(counter <= 15) do
+	[PROCESS_TABLE + counter * 16 + 4] = TERMINATED;
+	counter = counter + 1;
+endwhile;
+counter = 76;
+
+// *** Used_Pages ***
+
+counter = 0;
+while(counter < 83) do
+	[MEMORY_FREE_LIST + counter] = 1;
+	counter = counter + 1;
+endwhile;
+
+// ****
+
+// *** Free_Pages ***
+
+counter = 83;
+while(counter <= 127) do
+	[MEMORY_FREE_LIST + counter] = 0;
+	counter = counter + 1;
+endwhile;
+
+[SYSTEM_STATUS_TABLE + 2] = 45; // MEM_FREE_COUNT
+[SYSTEM_STATUS_TABLE + 3] = 0; //  WAIT_FREE_COUNT
+
+return;
