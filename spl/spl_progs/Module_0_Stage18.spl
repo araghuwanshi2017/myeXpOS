@@ -1,0 +1,91 @@
+
+//*********************************** MODULE 0 (RESOURCE MANAGER MODULE) ***********************************
+
+alias functionNum R1;
+alias currentPID R2;
+
+// *** ACQUIRE_TERMINAL ***
+
+if(R1 == ACQUIRE_TERMINAL) then
+
+	while([TERMINAL_STATUS_TABLE] == 1) do
+
+		[PROCESS_TABLE + currentPID*16 + 4] = WAIT_TERMINAL;
+
+		//multipush(R0 , R1 , R2 , R3);
+		backup;
+		call MOD_5;
+		restore;
+		//multipop(R0 , R1 , R2 , R3);
+
+	endwhile;
+
+	[TERMINAL_STATUS_TABLE] = 1;
+	[TERMINAL_STATUS_TABLE + 1] = currentPID;
+
+	breakpoint;
+
+	return ;
+
+endif;
+
+// ****
+
+// *** RELEASE_TERMINAL ***
+
+if(R1 == RELEASE_TERMINAL) then
+
+	if([TERMINAL_STATUS_TABLE + 1] != currentPID) then 
+	
+		R0 = -1;
+		return;
+	
+	else
+
+		[TERMINAL_STATUS_TABLE] = 0;
+		alias cnt R4;
+		cnt = 0;
+		while(cnt < 16) do
+
+			if([PROCESS_TABLE + cnt * 16 + 4] == WAIT_TERMINAL) then 
+
+				[PROCESS_TABLE + cnt * 16 + 4] = READY;
+
+			endif;
+
+			cnt = cnt + 1;
+
+		endwhile;
+
+		R0 = 0;
+		return;
+
+	endif;
+
+endif;
+
+// ****
+
+// *** ACQUIRE_DISK ***
+
+if(R1 == ACQUIRE_DISK) then
+	
+	while([DISK_MAP_TABLE] == 1) do
+		[PROCESS_TABLE + (R2 * 16) + 4] = WAIT_DISK;
+	
+		backup;
+		call MOD_5;
+		restore;
+
+	endwhile;
+
+	[DISK_MAP_TABLE] = 1; // Setting 1 as Disk is acquired
+	[DISK_MAP_TABLE + 4] = R2; //Setting up  Pid at 4 Location
+	
+	return ;
+
+endif; 
+
+// ****
+	
+// **********___________**********
