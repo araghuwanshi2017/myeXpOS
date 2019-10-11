@@ -1,6 +1,8 @@
 
 // ***************************** INT 9 (EXEC SYSTEM CALL) ******************************
 
+// ***************************** (FINAL VERSION) ******************************
+
 //print "Entered in INT 9";
 alias UserSP R0;
 UserSP = SP;
@@ -25,8 +27,8 @@ Inode_Index = -1;
 //print name;
 
 while(counter < 16) do
-	print ([INODE_TABLE + (counter * 16) + 1]);
-	if(([INODE_TABLE + (counter * 16) + 1]) == name) then
+	// print ([INODE_TABLE + (counter * 16) + 1]);
+	if(([INODE_TABLE + (counter * 16)] == EXEC) && ([INODE_TABLE + (counter * 16) + 1]) == name) then
 		Inode_Index = counter;
 		break;	
 	endif;
@@ -40,9 +42,11 @@ Return_Value = ([PTBR + 2 * ((UserSP - 1)/512)] * 512) + (UserSP - 1)%512;
 if(Inode_Index == -1) then
 	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
 	SP = UserSP;
-	[Return_Value] = -1;
+	[Return_Value] = -1; //Invalid or Failure
 	ireturn;
 else
+
+// *** Exit Currently Running Process ***
 	backup;
 	//Storing the required Values
 	R1 = 3; //Function Number For Exit Process
@@ -50,19 +54,33 @@ else
 	call MOD_1;
 	restore;
 
+// ****
 	alias user_Area_Page_Num R5;
-	user_Area_Page_Num = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11];
+	user_Area_Page_Num = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11]; //Allocated Same User Area Page
 
 	[MEMORY_FREE_LIST + user_Area_Page_Num] = [MEMORY_FREE_LIST + user_Area_Page_Num] + 1;  //Memory_Free_List
 	[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1; //MEM_FREE_COUNT
 
-	SP = (user_Area_Page_Num)* 512 - 1;   //Kernel Stack
+	SP = (user_Area_Page_Num)* 512 - 1;   //Kernel Stack Allocated Same User Area Page
+
+
+// *** Initialization Of PER_PROCESS RESOURCE TABLE ***
+
+//	alias Inc R7;
+//	Inc = 0;
+//	while(Inc < 16) do	
+//		[SP + 512  - Inc] = -1;
+//		Inc = Inc + 1;
+//	endwhile;
+	
+// ****
 
 	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 4] = RUNNING;
 	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 7] = Inode_Index;
 
 	PTBR = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE + 1] * 20);
 
+breakpoint;
 // ********** PAGE_TABLE ************
 
 //*** Library ***
@@ -71,85 +89,81 @@ else
 	[PTBR + 2] = 64;
 	[PTBR + 3] = "0100";
 // ****
+breakpoint;
+// *** Invalidating Heap Entries ***	
 
-// *** Heap ***
-	backup;
+	[PTBR + 4] = -1;
+	[PTBR + 5] = "0000";
 	
-	//Storing the Required Values
-	backup;
-	R1 = 1; // Function Number For Get Free Page
-	R2 = [SYSTEM_STATUS_TABLE + 1]; // CurrentPID
-	call MOD_2;
-	[PTBR + 4] = R0; // [PTBR + 4]
-	[PTBR + 5] = "0110";// Auxillary Bits
-	restore;
-	
-	backup;
-	R1 = 1; // Function Number For Get Free Page
-	R2 = [SYSTEM_STATUS_TABLE + 1];
-	call MOD_2;
-	[PTBR + 6] = R0; // [PTBR + 6]
-	[PTBR + 7] = "0110";// [PTBR + 7]
-	restore;	
+	[PTBR + 6] = -1;
+	[PTBR + 7] = -1;
 
 // ****
 
 // *** Stack ***
 	backup;
-	R1 = 1;
-	R2 = [SYSTEM_STATUS_TABLE + 1];
+	R1 = 1; // Func Num For GET_FREE_PAGE
 	call MOD_2;
 	[PTBR + 16] = R0;    //[PTBR + 16]
 	[PTBR + 17] = "0110"; //Auxillary Bits	
 	restore;	
 
 	backup;
-	R1 = 1;	
-	R2 = [SYSTEM_STATUS_TABLE + 1];
+	R1 = 1;	 // Func Num For GET_FREE_PAGE
 	call MOD_2;
 	[PTBR + 18] = R0;
 	[PTBR + 19] = "0110";
 	restore;
 // ****	
-
+breakpoint;
 //*** Code_Pages ***
-	alias i R7;
-	alias j R8;	
-	i = 0;
-	j = 0;
-	while(j < 4) do
-		if([INODE_TABLE + (Inode_Index * 16) + 8 + j] != -1) then
-			backup;
-			R1 = 1;
-			R2 = [SYSTEM_STATUS_TABLE + 1];
-			call MOD_2;
+ 
+// *** Validating only one page ***
+	backup;
+
+	R1 = 5; //Func Num For GET_CODE_PAGE
+	R3 = [INODE_TABLE + ([PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 7] * 16) + 8];
+	call MOD_2;
 		
-			//loadi(R0 , [INODE_TABLE + (([PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 7]) * 16) + 8 + j]); // loading codepages in memory
-			[PTBR + 8 + i] = R0; 
-			[PTBR + 9 + i] = "0100";	
-			
-		// Storing LOAD_DISK , PID , Page and Block Number
+	[PTBR + 8] = R0; // Code_Page
+	[PTBR + 9] = "0100";	
+	
+	restore;
+// ****
+breakpoint;
+// *** Invalidating Rest Of The Code Pages ***
 
-			R1 = 2;
-			R2 = [SYSTEM_STATUS_TABLE + 1];
-			R4 = R0;
-			R5 = [INODE_TABLE + ([PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 7] * 16) + 8 + j]; 
+	[PTBR + 10] = -1;
+	[PTBR + 11] = "0000";
+	[PTBR + 12] = -1;
+	[PTBR + 13] = "0000";
+	[PTBR + 14] = -1;
+	[PTBR + 15] = "0000";
 
-			call MOD_4;
 
-			restore;
-		else
-			[PTBR + 8 + i] = -1;
-        	        [PTBR + 9 + i] = "0000";
-		endif;
-		i = i + 2;
-		j = j + 1;
-	endwhile;
-
-// ****			
-     restore;
+// ****	
 
 breakpoint;
+
+// *** Initialization Of DISK_MAP_TABLE of the Process ***
+	counter = 0;
+	alias cnt R6;
+	cnt = 4; 
+	while(counter < 16) do
+		if(((counter >= 8) && (counter < 12)) && ([INODE_TABLE + R3 * 16 + counter] != -1)) then
+			[DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + cnt] = [INODE_TABLE + R3 * 16 + counter];
+			cnt = cnt + 1;
+		else
+			[DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + counter] = -1;
+		endif;
+		counter = counter + 1;
+	endwhile;
+	
+
+breakpoint;
+
+[Return_Value] = 0; // Return Success
+
 [[PTBR + 16] * 512] = [[PTBR + 8] * 512 + 1] ;// Entry_Point SP = IP 
 
 [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0; //Mode_Flag to 0 
@@ -157,6 +171,7 @@ SP = 8 * 512 ; //User_Stack
 
 PTBR = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE + 1] * 20);
 endif;
+
 
 ireturn;
 	
