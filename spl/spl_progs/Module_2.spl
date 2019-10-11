@@ -11,21 +11,27 @@
 
 alias Func_Num R1;
 alias get_Released R2;
+alias block_Number R3;
+alias currentPID R6;
 
 // *** Get_Free_Page *** (Final Version)
 
-if(Func_Num == 1) then
+if(R1 == GET_FREE_PAGE) then
+
+
 	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] + 1;
 	
 	while([SYSTEM_STATUS_TABLE + 2] == 0) do
 		[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 4] = WAIT_MEM;
-		call MOD_5;		
+		backup;
+		call MOD_5;
+		restore;		
 	endwhile;
 
 	[SYSTEM_STATUS_TABLE + 3] = [SYSTEM_STATUS_TABLE + 3] - 1; //Wait_Mem_Count;
 	[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] - 1; //Mem_Free_Count;
 	
-	alias page_Index R3;
+	alias page_Index R4;
 	page_Index = 76;
 	while(page_Index < 128) do	
 		if([MEMORY_FREE_LIST + page_Index] == 0) then
@@ -35,7 +41,6 @@ if(Func_Num == 1) then
 		endif;		
 		page_Index = page_Index + 1;
 	endwhile;
-
 	return;
 
 endif;
@@ -43,9 +48,9 @@ endif;
 // ****
 
 // *** Release_Page *** (Final Version)
-if(Func_Num == 2) then
+if(R1 == RELEASE_PAGE) then
 	backup; 
-	[MEMORY_FREE_LIST + get_Released]  = [MEMORY_FREE_LIST + get_Released] - 1;
+	[MEMORY_FREE_LIST + get_Released]  = [MEMORY_FREE_LIST + get_Released] - 1; // Decrement
 	
 	if([MEMORY_FREE_LIST + get_Released] == 0) then
 		[SYSTEM_STATUS_TABLE + 2] = [SYSTEM_STATUS_TABLE + 2] + 1; //Increment Mem_Free_Count
@@ -64,6 +69,61 @@ if(Func_Num == 2) then
 	return;
 endif;
 
+// ****
+
+// *** RELEASE_BLOCK ***
+if(R1 == RELEASE_BLOCK) then
+	[DISK_FREE_LIST + R3] = 0;
+	return ;
+endif;
+
+// ****
+
+if(R1 == GET_CODE_PAGE) then
+
+// *** If Code_Page is loaded by Some Other Process ***
+	PTBR = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE + 1] * 20);
+	alias counter R4;
+	counter = 0;
+	alias count R5;
+	count = 0;
+	while(counter < 16) do
+		while(count < 4) do
+			if(([DISK_MAP_TABLE + (counter * 10) + count] == R3) && ([PTBR + 8 + (2 * count)] != -1)) then
+
+				[MEMORY_FREE_LIST + [PTBR + 8 + (2 * count)]] =  [MEMORY_FREE_LIST + [PTBR + 8 + (2 * count)]] + 1;
+				R0 = [PTBR + 8 + (2 * count)];
+				return ; 
+			endif;
+			count = count + 1;
+		endwhile;
+		counter = counter + 1;
+	endwhile;
+
+// ****
+
+// *** Code_Page Is NA has to be Loaded From Disk ***
+	breakpoint;	
+	R1 = GET_FREE_PAGE;
+	call MOD_2;
+
+	// Storing LOAD_DISK , PID , Page and Block Number
+
+	R1 = 2; //Func Num For DISK_LOAD 
+	R2 = [SYSTEM_STATUS_TABLE + 1];
+	R4 = R0;
+	R5 = R3; 
+	backup;
+	call MOD_4;
+	restore;
+	// R0 Contains the Memory_Page_Number
+
+	return ;
+
+// ****
+	
+endif;
+				
 // ****
 
 

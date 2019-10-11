@@ -1,0 +1,21 @@
+int main()
+{
+	decl
+		str P; 
+		int tmp , Odd;
+	enddecl
+
+	begin
+		tmp = exposcall("Fork");
+		if(tmp == 0) then
+			Odd = 1;
+			while(Odd < 100) do
+				write(Odd);
+				Odd = Odd + 2;
+			endwhile;	
+		else
+			tmp = exposcall("Exec" , "Even.xsm");
+		endif;
+		return 0;
+	end
+}

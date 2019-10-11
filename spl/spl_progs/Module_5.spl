@@ -1,46 +1,52 @@
 
-//************************************* MODULE 5 CONTEXT SWITCHER MODULE (RR SCHEDULER) ********************************* 
+//************************************* MODULE 5 CONTEXT SWITCHER MODULE (RR SCHEDULER) *********************************
 
 alias currentPID R0;
 currentPID = [SYSTEM_STATUS_TABLE + 1];
+multipush(BP);
+
 alias process_table_entry R1;
-process_table_entry = PROCESS_TABLE + currentPID * 16;
+process_table_entry = PROCESS_TABLE + (currentPID * 16);
+
 
 [process_table_entry + 12] = (SP%512);
 [process_table_entry + 14] = PTBR;
 [process_table_entry + 15] = PTLR;
 
-alias counter R2;
-counter = [SYSTEM_STATUS_TABLE + 1] + 1;
-alias newPID R3;
+alias newPID R2;
 newPID = 0;
+alias counter R3;
+counter = currentPID + 1;
 
 while(counter < 16) do
-	if([PROCESS_TABLE + counter * 16 + 4] == CREATED || [PROCESS_TABLE + counter * 16 + 4] == READY) then
+
+	if(([PROCESS_TABLE + (counter * 16) + 4] == CREATED) || ([PROCESS_TABLE + (counter * 16) + 4] == READY)) then
 		newPID = counter;
-		break;	
+		break;
 	endif;
 	counter = counter + 1;
 endwhile;
 
 alias new_process_table R4;
-new_process_table = PROCESS_TABLE + newPID*16;
+new_process_table = PROCESS_TABLE + (newPID*16);
 
 //Set Back Kernel SP , PTBR , PTLR
 SP = [new_process_table + 11] * 512 + [new_process_table + 12];
 PTBR = [new_process_table + 14];
 PTLR = [new_process_table + 15];
-
 [SYSTEM_STATUS_TABLE + 1] = newPID;
+
+
 if([new_process_table + 4] == CREATED) then
 	SP = [new_process_table + 13];
+	BP = [[new_process_table + 11] * 512];
 	[new_process_table + 4] = RUNNING;
+	[new_process_table + 9] = 0;
 	ireturn;
 endif;
 
 [new_process_table + 4] = RUNNING;
 
 
+multipop(BP);
 return;
-
-// ******************
