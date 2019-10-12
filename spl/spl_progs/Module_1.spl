@@ -10,7 +10,25 @@
 alias func_Num R1;
 alias currentPID R2;
 
-if(func_Num == 2) then
+if(R1 == GET_PCB_ENTRY) then
+	alias i R0;
+	i = 0;
+	while(i < 16) do
+		if([PROCESS_TABLE + i * 16 + 4] == TERMINATED) then
+			[PROCESS_TABLE + i * 16 + 14] = PAGE_TABLE_BASE + i * 20;
+			[PROCESS_TABLE + i * 16 + 15] = 10;
+			[PROCESS_TABLE + i * 16 + 4] = ALLOCATED;
+			[PROCESS_TABLE + i * 16 + 1] = i;
+			return;
+		endif;
+		i = i + 1;
+	endwhile;
+
+	R0 = -1;
+	return;
+endif;
+	
+if(R1 == FREE_USER_AREA_PAGE) then
 // *** Invoke Release Page ***
 	backup;
 
@@ -22,9 +40,25 @@ if(func_Num == 2) then
 	return;
 endif;
 
-if(func_Num == 3) then
+if(R1 == EXIT_PROCESS) then
 
+	if([PROCESS_TABLE + R2 * 16 + 9] != 9) then
+
+		alias i R3;
+		i = 1;
+		while( i < 16) do
+			if(([PROCESS_TABLE + i * 16 + 4] ==  WAIT_PROCESS) && ([PROCESS_TABLE + i * 16 + 5] == R2)) then
+				[PROCESS_TABLE + i * 16 + 4] = READY; // Stage Changed to Ready as the Process is Terminating
+				if([PROCESS_TABLE + i * 16 + 2] == R2) then
+					[PROCESS_TABLE + i * 16 + 2] = -1; // Orphan_Process
+				endif;
+			endif;
+			i = i + 1;
+		endwhile;
+	endif;
+			
 // *** Invoke Free Page Table ***
+
 	backup;
 	R1 = 4; //Func Number For Free Page Table
 	R2 = currentPID; // PID
@@ -34,8 +68,8 @@ if(func_Num == 3) then
 // ****
 
 // *** Invoke Free User Area Page ***
+
 	backup;
-	
 	R1 = 2; // Func Number For Free User Area Page
 	R2 = currentPID;
 	call MOD_1;
@@ -46,7 +80,7 @@ if(func_Num == 3) then
 	return;
 endif;
 
-if(func_Num == 4) then
+if(R1 == FREE_PAGE_TABLE) then
 	backup;
 	PTBR = PAGE_TABLE_BASE + (currentPID * 20);
 	
@@ -64,7 +98,7 @@ if(func_Num == 4) then
 		if([PTBR + i] != -1) then // For Valid Page
 			backup;
 	
-			R1 = 2;
+			R1 = 2; // Release_Page
 			R2 = [PTBR + i]; //Page_Num
 			call MOD_2;
 			[PTBR + i] = -1;
@@ -76,7 +110,63 @@ if(func_Num == 4) then
 
 	restore;
 
+// *** Invalidating Heap and Stack Entries From DISK_MAP_TABLE ***
+
+// *** Heap ***
+
+	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 2] != -1) then
+		backup;
+		R1 = 4; // Func_Num for RELEASE_BLOCK
+		R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 2]; //BLOCK_NUMBER
+		R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
+		call MOD_2; // Memory_Manager
+		restore;
+	endif;
+	
+	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 3] != -1) then
+                backup;
+                R1 = 4; // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 3]; //BLOCK_NUMBER
+                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
+                call MOD_2; // Memory_Manager
+                restore;
+        endif;
+
+// ***** 
+
+
+// *** Stack *** 
+
+	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 8] != -1) then
+                backup;
+                R1 = 4; // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 8]; //BLOCK_NUMBER
+                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
+                call MOD_2; // Memory_Manager
+                restore;
+        endif;
+
+	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 9] != -1) then
+                backup;
+                R1 = 4; // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 9]; //BLOCK_NUMBER
+                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
+                call MOD_2; // Memory_Manager
+                restore;
+        endif;
+
+// ****
+
+// Invalidate *** DISK_MAP_TABLE ***
+	alias counter R3;
+	counter = 0;
+	while(counter < 10) do
+		[DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + counter] = -1;
+		counter = counter + 1;
+	endwhile;
 	return ;
 endif;
+
+// ****
 
 // ********_________********
