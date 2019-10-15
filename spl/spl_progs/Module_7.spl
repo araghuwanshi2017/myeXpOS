@@ -38,12 +38,20 @@ loadi(20 , 33);
 loadi(21 , 34);
 
 // *** Load INT 10 ***
-loadi(22,35);
-loadi(23,36);
+loadi(22 , 35);
+loadi(23 , 36);
 
 // *** Load INT 11 ***
-loadi(24,37);
-loadi(25,38);
+loadi(24 , 37);
+loadi(25 , 38);
+
+// *** Load INT 13 ***
+loadi(28 , 41);
+loadi(29 , 42);
+
+// *** Load INT 14 ***
+loadi(30 , 43);
+loadi(31 , 44);
 
 // *** Load INT 15 ***
 loadi(32 , 45);
@@ -184,13 +192,13 @@ endwhile;
 
 // *** Initialization of Per_Process_Resource_Table ***
 
-counter = 81 * 512 - 1;
+counter = 81 * 512 - 16;
 
 alias cnt R1;
 cnt = 0;
 
 while(cnt < 16) do
-	[counter - cnt] = -1;
+	[counter + cnt] = -1;
 	cnt = cnt + 1;
 endwhile;
 
@@ -210,8 +218,19 @@ endwhile;
 	[DISK_MAP_TABLE + (currentPID * 10) + 4] = 7;
 	[DISK_MAP_TABLE + (currentPID * 10) + 5] = 8;
 
+// ****
 
-	
+// *** Initializaation of Semaphore_Table ***
+
+	counter = 0;
+	while(counter < 128) do
+		[SEMAPHORE_TABLE + counter] = -1;  //Setting Locking_PID as -1
+		[SEMAPHORE_TABLE + counter + 1] = 0; // Initializing Process_Count as 0
+		counter = counter + 4;
+	endwhile;
+
+// ****
+			
 return;
 	
 // *********__________*********

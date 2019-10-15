@@ -74,9 +74,9 @@ if(R1 == DISK_LOAD) then
 	restore;
 
 // ****
-	[DISK_MAP_TABLE + 1] = 0;
-	[DISK_MAP_TABLE + 2] = R4;
-	[DISK_MAP_TABLE + 3] = R5;
+	[DISK_STATUS_TABLE + 1] = 0;  // Setting Zero For Load 
+	[DISK_STATUS_TABLE + 2] = R4; // Frame_Number
+	[DISK_STATUS_TABLE + 3] = R5; // Block_Number
 
 	load(R4 , R5);
 	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 4] = WAIT_DISK;

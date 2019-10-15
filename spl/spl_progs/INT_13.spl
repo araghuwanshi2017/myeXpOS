@@ -1,0 +1,129 @@
+// ******************************** INTERRUPT 13 (SEMAPHORE SYSTEM CALL) *******************************
+
+alias UserSP R0;
+	UserSP = SP;
+
+
+//Extracting System_Call_Number	
+alias sys_Call_Num R1;
+	sys_Call_Num = [[PTBR +2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+
+alias current_PID R2;
+	current_PID = [SYSTEM_STATUS_TABLE + 1];
+
+// Saving User_Stack UPTR
+[PROCESS_TABLE + R2 * 16 + 13] = SP;
+
+//Switch to Kernel_Stack (KPTR)
+SP = [PROCESS_TABLE + R2 * 16 + 11] * 512 - 1;
+
+backup;
+
+// *** Semget_System_Call ***
+
+if(R1 == 17) then
+	// Setting Mode_Flag equal to System_Call_Number
+	[PROCESS_TABLE + R2 * 16 + 9] = 17;
+
+	// Base Pointer Of Per_Process_Resource_Table
+	alias Base_RT R4;
+		Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1 ) * 512 - 16;
+	alias cnt R5;
+		cnt = 0;
+
+// *** Finding Index Of Free Entry ***
+	while(cnt < 16) do
+		if([Base_RT + cnt] == -1) then // If Found a Free_Entry
+			break;
+		endif;
+		cnt = cnt + 2;
+	endwhile;
+
+	if(cnt == 16) then
+		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // If Not Free_Entry Available in the Resource_Table
+		[PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+		restore;
+		SP = R0;
+		
+		ireturn ;
+	endif;
+	
+// Setting Up the Free Entry of Per_Process_Resource_Table
+	[Base_RT + cnt] = 1; // 1 Indicating that Resource is a Semaphore
+	
+// Storing The Required Values
+
+	backup;
+	R1 = ACQUIRE_SEMAPHORE; // Func_Number For Acquiring a semaphore is 6
+	R2 = R2; // Current_PID
+	call MOD_0; //Calling Process_Manager_Module to Acquire a Semaphore
+
+	if(R0 == -1) then
+		restore;	
+		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -2; // If there are no Free_Semaphores
+		[PROCESS_TABLE + R2 * 16 + 9] = 0;// Switching Back To USer_Mode
+		restore;
+		SP = UserSP;
+		ireturn;
+	endif;
+	
+	[Base_RT + cnt + 1] = R0; //Stored the Index of Semaphore_Table_Entry
+
+	restore;
+
+// ****
+	// Semaphore_Descriptor
+	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = cnt/2; // Per_Process_Resource_Table Entry_Index
+	
+	[PROCESS_TABLE + R2 * 16 + 9] = 0; //Switching Back to User_Mode
+	
+	restore;
+	SP = UserSP;
+	ireturn ;
+endif;
+
+// ****
+
+// *** SemRelease System_Call ***
+ 
+if(R1 == 18) then
+	// Setting Mode_Flag equal to System_Call_Number
+        [PROCESS_TABLE + R2 * 16 + 9] = 18;
+	
+	alias Sem_D R3;
+		Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+	
+	alias Base_RT R4;
+		Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1)* 512 - 16;
+
+	if(Sem_D < 0 || Sem_D > 7 || [Base_RT + 2 * Sem_D] != 1) then
+		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Invalid_Entry
+                [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+
+                restore;
+                SP = R0;
+                ireturn ;
+	endif;
+	
+	backup;
+	R1 = RELEASE_SEMAPHORE; // Func_Number for Releasing a Semaphore
+	R2 = R2; // Current_PID
+	R3 = [Base_RT + 2 * Sem_D + 1]; // Semaphore_Table_Index
+	call MOD_0; // Calling Resource_Manager_Module
+	restore;
+
+// Invalidating Per_Process_Resource_Table Entry
+	[Base_RT + 2 * Sem_D] = -1;
+
+	[PROCESS_TABLE + R2 * 16 + 9] = 0; //Switching Back to User_Mode 
+	restore;
+
+	SP = UserSP;
+	ireturn ;
+
+endif;
+// **** 
+		
+
+
+	
