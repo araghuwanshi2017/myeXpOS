@@ -1,0 +1,226 @@
+ // ********************* INTERRUPT 8 (FORK SYSTEM CALL) **********************
+
+breakpoint;
+alias  UserSP R3;
+UserSP = SP;
+
+// User_Stack UPTR
+[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
+
+//Set Mode_Flag
+[PROCESS_TABLE +([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 8; 
+
+
+// Kernel_Stack (KPTR)
+SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+
+alias i R10;
+
+backup;
+
+// *** Invoke Get_Pcb_Entry ***
+	R1 = 1;
+	call MOD_1;
+	
+//	backup;
+//	print R0;
+//	print ":->";
+//	restore;
+
+	breakpoint;
+	if(R0 == -1) then
+		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + ((UserSP - 1) % 512)] = -1;
+		[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
+		SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+		ireturn;
+	else
+	// PID of child
+		[PROCESS_TABLE + R0 * 16 + 1] = R0;
+	
+// Process_PTBR
+alias parent_Page_Table R4;
+	parent_Page_Table = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE+ 1] * 20);
+
+//Child_PTBR
+alias child_Page_Table R5;
+	child_Page_Table = PAGE_TABLE_BASE + (R0 * 20); 
+	
+backup;
+// *** Allocating Heap Pages For Process ***
+		if([PTBR + 4] == -1) then
+			backup;
+			R1 = GET_FREE_PAGE;
+			call MOD_2;
+			[PTBR + 4] = R0;
+			[PTBR + 5] = "1110";	
+			restore;
+
+			backup;	
+			R1 = GET_FREE_PAGE;
+			call MOD_2;
+			[PTBR + 6] = R0;
+			[PTBR + 7] = "1110";
+			restore;
+
+		endif;
+// ****
+restore;
+
+breakpoint;
+
+// *** Allocating Stack Pages and User_Area_Page For Child ***
+		
+//Child PROCESS_TABLE
+alias child_Process_Table_Entry R6;
+	child_Process_Table_Entry = PROCESS_TABLE + R0 * 16;
+
+// Parent PROCESS_TABLE
+alias parent_Process_Table_Entry R7;
+	parent_Process_Table_Entry = PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16);			
+
+
+		backup;
+		R1 = GET_FREE_PAGE;
+		call MOD_2;
+		[child_Page_Table + 16] = R0;
+		[child_Page_Table + 17] = "0110"; 
+		restore;
+		
+		backup;
+		R1 = GET_FREE_PAGE;
+		call MOD_2;
+		[child_Page_Table + 18] = R0;
+		[child_Page_Table + 19] = "0110";
+		restore;
+		
+		backup;
+		R1 = GET_FREE_PAGE;
+		call MOD_2;
+		[child_Process_Table_Entry + 11] = R0;
+		restore;
+// ****	
+
+
+// *** Initialization of Process_Table For Child ***
+	
+
+	[R6 + 3] = [R7 + 3];   // USERID
+	[R6 + 6] = [R7 + 6];   // SWAP_FLAG
+	[R6 + 7] = [R7 + 7];   // INODE_INDEX
+	[R6 + 10] = [R7 + 10]; // USER_AREA_SWAP_STATUS
+	[R6 + 13] = [R7 + 13]; // UPTR
+
+	[R6 + 0] = 0;  // TICK
+	[R6 + 9] = 0;  // MODE_FLAG
+	[R6 + 12] = 0; // KPTR
+
+	[R6 + 2] = [R7 + 1]; // PPID = parentPID;
+	[R6 + 4] = CREATED;  // STATE
+		
+// ****
+
+// *** Initialization Of Per_Process_Resource_Table ***
+
+	alias child_Base_RT R13;
+		child_Base_RT = ([PROCESS_TABLE + R0 * 16 + 11] + 1 )* 512 - 16;
+	alias parent_Base_RT R14;
+		parent_Base_RT = ([PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] + 1 )* 512 - 16;
+
+	i = 0;
+	alias Sem_ID R8;
+	while(i < 16) do
+		[child_Base_RT + i] = [parent_Base_RT + i];
+		[child_Base_RT + i + 1] = [parent_Base_RT + i + 1];
+		Sem_ID = [parent_Base_RT + i + 1];
+		if([parent_Base_RT + i] != -1 && [parent_Base_RT + i] == SEMAPHORE) then
+			[SEMAPHORE_TABLE + 4 * Sem_ID + 1] =  [SEMAPHORE_TABLE + 4 * Sem_ID + 1] + 1;// Incrementing Process count as Child is sharing the semaphore
+		endif;
+		i = i + 2;	
+	endwhile;
+		
+	
+// *** Initialization Of Per_Prcess_Disk_Map_Table ***
+
+	alias child_DMT R8;
+	alias parent_DMT R9;
+	child_DMT = DISK_MAP_TABLE + [R6 + 1]* 10;
+	parent_DMT = DISK_MAP_TABLE + [R7 + 1] * 10;
+	
+	[R8 + 4] = [R9 + 4];
+	[R8 + 5] = [R9 + 5];
+	[R8 + 6] = [R9 + 6];
+	[R8 + 7] = [R9 + 7];
+	[R8 + 8] = -1;
+	[R8 + 9] = -1;
+
+// ****
+
+// *** Initialization of Page_Table For Child ***
+
+breakpoint;
+	i = 0;
+	while(i < 16) do
+		[R5 + i] = [R4 + i];
+		[R5 + i + 1] = [R4 + i + 1];
+		if([R4 + i] != -1) then
+			[MEMORY_FREE_LIST + [R4 + i]] = [MEMORY_FREE_LIST + [R4 + i]] + 1;
+		endif;
+		i = i + 2;
+	endwhile;
+	
+alias child_Stack R11;
+	child_Stack = [R5 + 16] * 512;
+alias parent_Stack R12;
+	parent_Stack = [R4 + 16] * 512;
+
+// *** Copying Content of Stack From Parent to Child  ***
+
+	if(parent_Stack != -1) then
+		i = 0;
+		while(i < 512) do
+			[R11 + i] = [R12 + i];
+			i = i + 1;
+		endwhile;
+	endif;
+
+	child_Stack = [R5 + 18] * 512;
+	parent_Stack = [R4 + 18] * 512;
+	
+	if(parent_Stack != -1) then
+		i = 0;
+		while(i < 512) do
+			[R11 + i] = [R12 + i];
+			i = i + 1;
+		endwhile;
+	endif;
+	breakpoint;
+// ***
+
+// Storing BP on top of the Kernel Stack
+	[[R6 + 11] * 512] = BP;
+
+//child_Stack
+	R12 = [R6 + 13]; // Child
+
+//Parent_Stack
+	R11 = [R7 + 13]; // Parent
+
+// return Value For Child_Process as 0
+	[[R5 + 2 * ((R12 - 1)/512)] * 512 + (R12 - 1) % 512] = 0;
+
+// return Value For Parent_Process as child_PID
+	[[R4 + 2 * ((R11 - 1)/512)]*512 + (R11 - 1)%512] = [R6 + 1];
+
+endif;
+
+// ****
+
+	//setting Mode_Flag to 0
+		[R7 + 9] = 0;
+restore;
+	SP = R3;
+	
+ireturn;
+	
+// ************____________*************
+
