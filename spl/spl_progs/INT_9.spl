@@ -34,15 +34,13 @@ while(counter < 16) do
 	endif;
 	counter = counter + 1;
 endwhile;
-print Inode_Index;
+//print Inode_Index;
 
-alias Return_Value R4;
-Return_Value = ([PTBR + 2 * ((UserSP - 1)/512)] * 512) + (UserSP - 1)%512;
 
 if(Inode_Index == -1) then
 	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
 	SP = UserSP;
-	[Return_Value] = -1; //Invalid or Failure
+	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1)%512] = -1; //Invalid or Failure
 	ireturn;
 else
 
@@ -162,9 +160,11 @@ breakpoint;
 
 breakpoint;
 
-[Return_Value] = 0; // Return Success
+[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1)%512] = 0; // Return Success
 
 [[PTBR + 16] * 512] = [[PTBR + 8] * 512 + 1] ;// Entry_Point SP = IP 
+
+restore;
 
 [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0; //Mode_Flag to 0 
 SP = 8 * 512 ; //User_Stack
