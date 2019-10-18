@@ -1,14 +1,26 @@
+// Function Number	        Function Name  	   Arguments	                 Return Value
+// ACQUIRE_BUFFER = 1	   Acquire Buffer	   Buffer Number, PID	         NIL
+// RELEASE_BUFFER = 2  	   Release Buffer	   Buffer Number, PID	         0 or -1
+// ACQUIRE_DISK = 3	   Acquire Disk*	   PID	                         NIL
+// ACQUIRE_INODE = 4	   Acquire Inode	   Inodeindex, PID	         0 or -1
+// RELEASE_INODE = 5	   Release Inode	   Inodeindex, PID	         0 or -1
+// ACQUIRE_SEMAPHORE = 6   Acquire Semaphore       PID	                         Semaphore Table Index or -1
+// RELEASE_SEMAPHORE = 7   Release Semaphore       Semaphore Table Index, PID    0 or -1
+// ACQUIRE_TERMINAL = 8	   Acquire Terminal        PID	                         NIL
+// RELEASE_TERMINAL = 9	   Release Terminal        PID	                         0 or -1
 
 //*********************************** MODULE 0 (RESOURCE MANAGER MODULE) ***********************************
 
 alias functionNum R1;
 alias currentPID R2;
+alias ST_Index R3; 
 
 // *** ACQUIRE_TERMINAL ***
 
 if(R1 == ACQUIRE_TERMINAL) then
 
 	while([TERMINAL_STATUS_TABLE] == 1) do
+	
 
 		[PROCESS_TABLE + currentPID*16 + 4] = WAIT_TERMINAL;
 
@@ -70,7 +82,7 @@ endif;
 
 if(R1 == ACQUIRE_DISK) then
 	
-	while([DISK_MAP_TABLE] == 1) do
+	while([DISK_STATUS_TABLE] == 1) do
 		[PROCESS_TABLE + (R2 * 16) + 4] = WAIT_DISK;
 	
 		backup;
@@ -79,13 +91,55 @@ if(R1 == ACQUIRE_DISK) then
 
 	endwhile;
 
-	[DISK_MAP_TABLE] = 1; // Setting 1 as Disk is acquired
-	[DISK_MAP_TABLE + 4] = R2; //Setting up  Pid at 4 Location
+	[DISK_STATUS_TABLE] = 1; // Setting 1 as Disk is acquired
+	[DISK_STATUS_TABLE + 4] = R2; //Setting up  Pid at 4 Location
 	
 	return ;
 
 endif; 
 
 // ****
+
+// *** ACQUIRE_SEMAPHORE ***
+
+if(R1 == ACQUIRE_SEMAPHORE) then
+	alias i R0;
+	i = 0;
+	while(i < 32) do
+		if([SEMAPHORE_TABLE + i + 1] == 0) then
+			[SEMAPHORE_TABLE + i] = -1;	
+			[SEMAPHORE_TABLE + i + 1] = 1;
+			return;
+		endif;
+		i = i + 4;
+	endwhile;
+
+	R0 = -1;
+	return ;
+endif;
 	
-// **********___________**********
+// ****
+
+
+// *** RELEASE_SEMAPHORE ***
+
+if(R1 == RELEASE_SEMAPHORE) then
+	if([SEMAPHORE_TABLE + R3 * 4] == R2) then
+		[SEMAPHORE_TABLE + R3 * 4] = -1; //Unlocking the semaphore 
+		alias i R4;
+		i = 1;	
+		while(i < 16) do	
+			if(([PROCESS_TABLE + i * 16 + 4] == WAIT_SEMAPHORE) && ([PROCESS_TABLE + i * 16 + 5] == R3)) then
+				[PROCESS_TABLE + i * 16 + 4] = READY;
+			endif;
+			i = i + 1;
+		endwhile;
+	endif;		
+	[SEMAPHORE_TABLE + R3 * 4 + 1] = [SEMAPHORE_TABLE + R3 * 4 + 1] - 1; // Decrementing Process_Count	
+	return ;
+
+endif;	
+// ****
+			
+
+// **********___________***********
