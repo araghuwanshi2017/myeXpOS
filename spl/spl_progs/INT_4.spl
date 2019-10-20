@@ -1,0 +1,252 @@
+//************************ INTERRUPT 4 (CREATE AND DELETE SYSTEM CALL) **************************
+
+alias UserSP R0;
+	UserSP = SP;
+
+alias sys_Call_Number R1;
+	sys_Call_Number = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+
+alias currentPID R2;
+	currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+// Saving User_Stack 
+[PROCESS_TABLE + R2 * 16 + 13] = SP;
+
+//Switch to Kernel Stack
+SP = [PROCESS_TABLE + R2 * 16 + 11] * 512 - 1;
+
+alias file_Name R3;
+		R3 = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+
+alias inode_idx R4;
+		inode_idx = 1;	
+
+alias Permission R5;
+	Permission = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
+
+alias process_Table_Entry R6;
+	process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+
+alias Return_Value R10;
+	Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
+
+
+
+// *** Create_System_Call ***
+
+if(R1 == 1) then
+
+// Setting Mode_Flag Equal to System_Call_Number
+	[process_Table_Entry + 9] = 0;
+
+	while(inode_idx < MAX_FILE_NUM) do
+		if([INODE_TABLE + inode_idx * 16 + 1] == R3) then
+			[Return_Value] = 0; // File_already_Exists 
+			[process_Table_Entry + 9] = 0; //Switching back to User_Mode
+			SP = UserSP;
+			
+			ireturn ;
+		endif;
+		if([INODE_TABLE + inode_idx * 16 + 1] == -1) then
+			break;
+		endif;
+	
+		inode_idx = inode_idx + 1;
+	endwhile;
+
+// *** No Free_Entry Available in INODE_TABLE return to User_Mode with Return_Value as -1
+	if(inode_idx == MAX_FILE_NUM) then
+		[Return_Value] = -1; // No Free_Entry Available
+        [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
+        SP = UserSP;
+
+		ireturn;
+
+	endif;
+
+// **** 
+
+// *** Initialization of Inode_Table_Entry for the New_File ***
+	
+
+alias inode_Entry R8;
+	inode_Entry = INODE_TABLE + inode_idx * 16;
+
+	[inode_Entry] = DATA; // File_Type as  Data_File
+	[inode_Entry + 1] = R3; // file_Name 
+	[inode_Entry + 2] = 0; // File_Size as 0
+	
+// Setting Block_Number Entries as -1
+	[inode_Entry + 8] = -1;
+	[inode_Entry + 9] = -1;
+	[inode_Entry + 10] = -1;
+	[inode_Entry + 11] = -1;
+
+	[inode_Entry + 3] = [PROCESS_TABLE + R2 * 16 + 3]; //Setting USER ID from Process_Table
+	[inode_Entry + 4] = Permission; //Setting Permission bit got from the User_Stack
+
+// ****
+
+// *** Initialization of Root_File_Entry for the New_File ***
+
+alias root_Entry R9;
+	root_Entry = ROOT_FILE + inode_idx * 8;
+
+	[root_Entry] = file_Name;
+	[root_Entry + 1] = 0;
+	[root_Entry + 2] = DATA;
+	[root_Entry + 3] = [INODE_TABLE + inode_idx * 16 + 3];
+	[root_Entry + 4] = [INODE_TABLE + inode_idx * 16 + 4];
+
+// ****
+
+//Switching Back to User_Mode 
+	[PROCESS_TABLE + currentPID * 16 + 9] = 0; ///Satting Mode_Flag as 0;
+	
+	[Return_Value] = 0; //Success Return_Value as 0
+	SP = UserSP;
+
+ireturn ;
+
+endif;
+
+// ****
+
+
+// *** Delete_System_Call ***
+
+breakpoint;
+if(R1 == 4) then
+	// Setting Mode_Flag Equal to System_Call_Number
+	[process_Table_Entry + 9] = 0;
+	
+
+	while(inode_idx < MAX_FILE_NUM) do
+		if([INODE_TABLE + inode_idx * 16 + 1] == R3) then
+			break;
+		endif;
+		inode_idx = inode_idx + 1;
+	endwhile;
+
+// *** File Not Present in the INODE_TABLE 
+	if(inode_idx == MAX_FILE_NUM) then
+		[Return_Value] = 0; // File_Not_Present
+        [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
+         SP = UserSP;
+
+		ireturn;
+
+	endif;
+
+// ****
+
+// *** File is Not_Data_File
+	if(([INODE_TABLE + inode_idx * 16 + 1] == R3) && [INODE_TABLE + inode_idx * 16] != DATA) then
+		[Return_Value] = 0; // File_Not_Present
+        [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
+         SP = UserSP;
+
+		ireturn;
+
+	endif;
+// ****
+
+// *** Exclusive_Permission
+		if([INODE_TABLE + inode_idx * 16 + 4] == EXCLUSIVE) then
+			if([INODE_TABLE + inode_idx * 16 + 3] == 0) then
+					[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Exclusive_Permission
+	    	    	[PROCESS_TABLE + R2 * 16 + 9] = 0; //Switching back to User_Mode 
+    	    		SP = UserSP;
+
+					ireturn;
+			endif;	
+		endif;	
+	
+// ****
+
+// *** Calling ACQUIRE_INODE ***
+	
+		backup;
+		R1 = ACQUIRE_INODE; // Func_Num for Acquire_Inode
+		R2 = currentPID ;
+		R4 = inode_idx; // Inode_Index in Inode_Table_Entry
+		call MOD_0;// Calling Resource_Manager_Module;
+		restore;
+
+// ****
+
+	if([FILE_STATUS_TABLE + inode_idx * 4 + 1] != -1) then
+		// Releasing Inode
+			backup;
+			R1 = RELEASE_INODE;
+			R2 = currentPID;
+			R4 = inode_idx;
+			call MOD_0;
+			restore;
+
+			[Return_Value] = -2; // File is Open , Can't be Deleted
+	        [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
+    	   	SP = UserSP; // Switching to User_Stack
+
+			ireturn;
+	endif;
+
+	alias inode_Table_Entry R6;
+		inode_Table_Entry = INODE_TABLE + inode_idx * 16;
+
+	alias i R7;
+	i = 8;
+
+	alias buffer_Number R8;
+
+	while([inode_Table_Entry + i] != -1) do
+		buffer_Number = ([inode_Table_Entry + i] % 4);
+		if(([BUFFER_TABLE + buffer_Number * 4] == [inode_Table_Entry + i]) && ([BUFFER_TABLE + buffer_Number * 4 + 1] == 1)) then
+			[BUFFER_TABLE + buffer_Number * 4 + 1] = 0 ;// Resetting the Dirty_Bit to 0; 
+
+			backup;
+			R1 = RELEASE_BLOCK; 
+			R3 = [inode_Table_Entry + i]; // Block_Number to be Released;
+			R6 = R2;
+			restore;
+		endif;
+		i = i + 1;
+	endwhile;
+
+// *** Invalidating Inode_Table_Entries and Root_File_Entries as Well***
+	i = 0;
+	while(i < 16) do
+		[inode_Table_Entry + i] = -1; 
+		i = i + 1;
+	endwhile;
+
+	i = 0;
+	while(i < 8) do
+		[ROOT_FILE + inode_idx * 8 + i] = -1; 
+		i = i + 1;
+	endwhile;
+
+// ****
+
+// *** Releasing the lock on the file ***
+
+	backup;	
+	R1 = RELEASE_INODE;
+	R2 = currentPID;
+	R4 = inode_idx;
+	call MOD_0;
+	restore;
+// **** 
+
+	[PROCESS_TABLE + currentPID * 16 + 9] = 0;//Setting Mode_Flag
+	SP = UserSP; //Switching to User_Stack
+
+	[Return_Value] = 0; //Success File_Deleted;
+
+	ireturn ;
+endif;
+
+// **** 
+
+
+// *************_______________***************	

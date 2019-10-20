@@ -21,6 +21,10 @@ loadi(9 , 22);
 
 // *** Load INT [4 - 18] ***
 
+// *** Load INT 4 ***
+loadi(10 , 23);
+loadi(11 , 24);
+
 // *** Load INT 6 ***
 loadi(14 , 27);
 loadi(15 , 28);
@@ -143,6 +147,7 @@ PTLR = 10;
 [76 * 512] = [65 * 512 + 1];
 
 [PROCESS_TABLE  + 16 + 1] = 1;
+[PROCESS_TABLE  + 16 + 3] = 1; //User_Id
 [PROCESS_TABLE  + 16 + 4] = CREATED;
 [PROCESS_TABLE  + 16 + 11] = 80;
 [PROCESS_TABLE  + 16 + 12] = 0;
@@ -220,12 +225,35 @@ endwhile;
 
 // ****
 
-// *** Initializaation of Semaphore_Table ***
+// *** Initialization of Semaphore_Table ***
 
 	counter = 0;
 	while(counter < 128) do
 		[SEMAPHORE_TABLE + counter] = -1;  //Setting Locking_PID as -1
 		[SEMAPHORE_TABLE + counter + 1] = 0; // Initializing Process_Count as 0
+		counter = counter + 4;
+	endwhile;
+
+// ****
+
+// *** Initialization of File_Status_Table ***
+
+	counter = 0;
+	while(counter < 16) do
+		[FILE_STATUS_TABLE + counter * 4] = -1;  //Setting Locking_PID as -1
+		[FILE_STATUS_TABLE + counter * 4 + 1] = -1; // Initializing File_Open_Count as -1
+		counter = counter + 1;
+	endwhile;
+
+// ****
+
+// *** Initialization of Buffer_Table ***
+
+	counter = 0;
+	while(counter < 16) do
+		[BUFFER_TABLE + counter] = -1;  //Setting Block_Number as -1
+		[BUFFER_TABLE + counter + 1] = 0; // Initializing Dirty_Bit as 0 
+		[BUFFER_TABLE + counter + 2] = -1; // Initializing Locking_PID as -1
 		counter = counter + 4;
 	endwhile;
 

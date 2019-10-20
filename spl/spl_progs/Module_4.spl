@@ -1,3 +1,8 @@
+//Function Number	  Function Name	      Arguments	Return                  Value
+//DISK_STORE = 1	  Disk Store	      PID, Page Number, Block Number	NIL
+//DISK_LOAD = 2	      Disk Load	          PID, Page Number, Block Number	NIL
+//TERMINAL_WRITE = 3  Terminal Write	  PID, Word	                        NIL
+//TERMINAL_READ = 4	  Terminal Read	      PID, Address	                    NIL
 
 //*********************************** MODULE 4 (DEVICE MANAGER MODULE) ***********************************
 
@@ -65,10 +70,10 @@ endif;
 
 if(R1 == DISK_LOAD) then
 
-// *** call DMM ***
+// *** calling RMM ***
 
 	backup;
-	R1 = 3;
+	R1 = 3; // Acquire_Disk
 	R2 = currentPID;
 	call MOD_0;
 	restore;
@@ -79,7 +84,7 @@ if(R1 == DISK_LOAD) then
 	[DISK_STATUS_TABLE + 3] = R5; // Block_Number
 
 	load(R4 , R5);
-	[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 4] = WAIT_DISK;
+	[PROCESS_TABLE + (currentPID * 16) + 4] = WAIT_DISK;
 
 	backup;
 	call MOD_5; //context_Switch
@@ -91,5 +96,32 @@ endif;
 
 // ****
 	
+// *** DISK_STORE ***
+
+if(R1 == DISK_STORE) then
+	
+// *** calling RMM ***
+
+	backup;
+	R1 = ACQUIRE_DISK; // Acquire_Disk
+	R2 = currentPID;
+	call MOD_0;
+	restore;
+
+// ****
+	[DISK_STATUS_TABLE + 1] = 1;  // Setting One For Store 
+	[DISK_STATUS_TABLE + 2] = R4; // Frame_Number/Page_Number
+	[DISK_STATUS_TABLE + 3] = R5; // Block_Number
+
+	store(page_Number , block_Number);
+	[PROCESS_TABLE + (currentPID * 16) + 4] = WAIT_DISK;
+
+	backup;
+	call MOD_5;
+	restore;
+
+	return ;
+endif;
+// ****
 
 // ********_________********
