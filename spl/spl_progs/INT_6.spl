@@ -2,55 +2,162 @@
 //*********************************** INTERRUPT 6 (READ SYSTEM CALL) *************************************
 
 
-// Setting up the Mode Flag to the corresponding syscall num for READ
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 7;
-
+breakpoint;
 alias userSP R0;
+alias fileDescriptor R1;
+alias currentPID R2;
+alias word R3;
+alias Return_Value R4;
+alias process_Table_Entry R5;
+alias Base_RT R6;
+alias open_File_Idx R7;
+alias inode_Idx R8;
+alias pos_lseek R9;
+alias open_File_Table_Entry R10;
+
 userSP = SP;
+fileDescriptor = [[PTBR + 2 * ((userSP - 4)/512)] * 512 + (userSP - 4) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+word = [[PTBR + 2 * ((userSP - 3)/512)] * 512 + ((userSP - 3) % 512)];
+Return_Value = [PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512);
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
 
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
 
+//Saving UPTR 
+[process_Table_Entry + 13] = SP;
+
+// Setting up the Mode_Flag to the Corresponding Syscall_Num for READ
+[process_Table_Entry + 9] = 7;
 
 //Setting SP to UArea Page Number * 512 - 1;
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+SP = [process_Table_Entry + 11] * 512 - 1;
 
-alias physicalPageNum R1;
-alias offset R2;
-alias fileDescriptor R3;
+// *** Read_System_call ***
+if (fileDescriptor == -1) then  
+	//Storing the Required Values and Calling DMM
 
-physicalPageNum = [PTBR + 2 * ((userSP - 4)/ 512)];
-
-offset = (userSP - 4) % 512;
-
-fileDescriptor = [(physicalPageNum * 512) + offset];
-
-alias physicalAddrRetVal R4;
-physicalAddrRetVal = [PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512);
-
-if (fileDescriptor != -1) then
-
-	 [physicalAddrRetVal] = -1;
-else
-	alias word R5;
-	word = [[PTBR + 2 * ((userSP - 3) / 512)] * 512 + ((userSP - 3) % 512)];  
 	backup;
-
-	//Storing the Required Values
-	R1 = 4;
-	R2 = [SYSTEM_STATUS_TABLE + 1];
-	R3 = word;
-
-	//Calling Device Manager Module
-	call MOD_4;	
+	R1 = 4; // Func_Num
+	R2 = currentPID; //PID
+	R3 = word; // Address of Word_To_Be_Read
+	call MOD_4;	//Calling DMM
 	restore;
 
-	[physicalAddrRetVal] = 0;
-endif;	
+	[Return_Value] = 0; // SUCCESS
 
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
+else
+	
+	if(fileDescriptor < 0 || fileDescriptor > 7) then //Invalid fileDescriptor
+		[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+		SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+		[Return_Value] = -1; // Failure
+		ireturn ;
 
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+	else
+		
+		Base_RT = ([process_Table_Entry + 11] + 1) * 512 - 16;
+
+		if([Base_RT + 2 * fileDescriptor] != FILE) then
+			[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+			SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+			[Return_Value] = -1; // No_File is open With this fileDescriptor
+			ireturn ;
+
+		else
+			open_File_Idx = [Base_RT + 2 * fileDescriptor + 1]; //Open_File_Table_Index
+			open_File_Table_Entry = OPEN_FILE_TABLE + open_File_Idx * 4;
+			inode_Idx = [open_File_Table_Entry]; //Inode_Index From OPEN_FILE_TABLE_Entry;
+
+// ***  Calling RMM For Acquiring Inode ***
+			backup;
+			R1 = ACQUIRE_INODE;//Func_Num
+			R2 = currentPID; //PID
+			R4 = inode_Idx; //Inode_Index;
+			call MOD_0;
+
+			if(R0 == -1) then
+				restore;
+				[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+				SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+				[Return_Value] = -1; // Fails to Acquire_Inode
+				ireturn ;
+			endif;
+
+			restore;
+// Inode_Acquired ****
+			
+			pos_lseek = [open_File_Table_Entry + 2]; //LSEEK Value From OPEN_FILE_TABLE_Entry
+			
+			if(inode_Idx == INODE_ROOT) then
+				if(pos_lseek == 480) then
+
+					backup;
+					R1 = RELEASE_INODE; //Func_Num
+					R2 = currentPID; //PID
+					R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry;
+					call MOD_0;
+					restore;
+
+					[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+					SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+					[Return_Value] = -2; // lseek = 480 (Root_File_Size)
+					ireturn ;				
+				endif;
+
+				[[PTBR + 2 * (word/512)] * 512 + (word) % 512] = [ROOT_FILE + pos_lseek];
+				[open_File_Table_Entry + 2] = [open_File_Table_Entry + 2] + 1;// Increment LSEEK value in Open_File_Table_Entry
+
+			else
+
+				if(pos_lseek == [INODE_TABLE + inode_Idx * 16 + 2]) then
+
+					backup;
+					R1 = RELEASE_INODE; //Func_Num
+					R2 = currentPID; //PID
+					R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry;
+					call MOD_0;
+					restore;
+
+					[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+					SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+					[Return_Value] = -2; // lseek = File_Size
+					ireturn ;
+				endif;
+
+				backup;
+				R1 = BUFFERED_READ ;//Func_Num
+				R6 = word; //Memory_Address
+				R4 = (pos_lseek % 512); //Offset_value
+				R3 = [INODE_TABLE + inode_Idx * 16 + 8 + (pos_lseek/512)]; //Disk_Block_Number
+				call MOD_3; //Calling FMM
+				restore;
+
+				[open_File_Table_Entry + 2] = [open_File_Table_Entry + 2] + 1;// Increment LSEEK value in Open_File_Table_Entry
+
+				//Calling Release_Inode In RMM
+
+				backup;
+				R1 = RELEASE_INODE;//Func_Num
+				R2 = currentPID;//PID
+				R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry
+				call MOD_0; //Calling RMM
+				restore;
+
+			endif;
+
+		endif;
+
+	endif;
+
+endif;		
+
+
+// ****
+
+[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
+SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+[Return_Value] = 0; //Success
 
 ireturn;
 
-// ****************
+// ***************________________***************

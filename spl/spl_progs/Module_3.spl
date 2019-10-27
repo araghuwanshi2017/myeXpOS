@@ -1,0 +1,218 @@
+//Function Number	Function Name	  Arguments 	                               Return Value
+//BUFFERED_WRITE = 1	Buffered Write	  Disk Block Number, Offset, Word 	       NIL
+//BUFFERED_READ = 2	Buffered Read	  Disk Block Number, Offset, Memory Address    NIL
+//OPEN = 3	        Open	          File Name	                               File Table Index, -1 or -2
+//CLOSE = 4	        Close	          File Table Index                             NIL
+
+
+//				**************************************** MODULE 0 (FILE MANAGER MODULE) ****************************************
+ 
+
+
+alias functionNum R1;
+// Open_File_Table_Index or file_Name
+alias Nam_Idx R2;
+alias Disk_Block_Num R3; 
+alias Offset R4;
+alias Word R5;
+alias mem_Addr R6;
+alias i R7;
+alias inode_Entry R8;
+alias currentPID R9;
+alias temp R10;
+
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+// *** OPEN FUNCTION ***
+
+if(R1 == OPEN) then
+	
+	i = 1;
+	while(i < 60) do
+		inode_Entry = INODE_TABLE + i * 16; 
+		if([inode_Entry + 1] == Nam_Idx) then
+			break;
+		endif;
+
+		i = i + 1;
+	endwhile;
+
+	if(i == 60 || [inode_Entry] != DATA) then
+		R0 = -1;
+		return;
+	endif;
+
+// *** Calling RMM ***
+	backup;
+	R1 = ACQUIRE_INODE; //Func_Number
+	R2 = currentPID;//CurrentPID
+	R4 = i;//Inode_Table_Idx
+	call MOD_0;
+
+	if(R0 == -1) then
+		restore;
+		R0 = -1;
+		return ;
+	endif;
+
+	restore;
+
+// ****
+	temp = 0;
+
+	while(temp < MAX_OPENFILE_NUM) do
+		if([OPEN_FILE_TABLE + temp * 4] == -1) then
+			break;
+		endif;
+		temp = temp + 1;
+	endwhile; 
+
+// *** No Free_Entry Available In Open_File_Table_Entry ***
+	if(temp == MAX_OPENFILE_NUM) then
+
+		backup;
+		R1 = RELEASE_INODE; //Func_Num
+		R2 = currentPID;//PID
+		R4 = i;
+		call MOD_0; //Calling RMM
+		restore;
+
+		R0 = -2;//Reached maximum number of open files 
+		return;
+
+	endif;
+
+// ****
+
+	alias file_Status_Entry R11;
+		file_Status_Entry = FILE_STATUS_TABLE + i * 4;
+
+	if(Nam_Idx == "root") then
+		[OPEN_FILE_TABLE + temp * 4] = INODE_ROOT;
+	else
+		if([file_Status_Entry + 1] == -1) then
+			[file_Status_Entry + 1] = 0; //Initialization of file_Status_Entry to 0
+		else
+			[file_Status_Entry + 1] = [file_Status_Entry + 1] + 1; //Incrementing File_Open_Count
+		endif;
+		[OPEN_FILE_TABLE + temp * 4] = i; // Inode_Index of the file
+	endif;
+
+	[OPEN_FILE_TABLE + temp * 4 + 1] = 1;// Open_Instance_Count
+	[OPEN_FILE_TABLE + temp * 4 + 2] = 0;// Initializing Lseek to 0
+		
+
+	backup;
+	R1 = RELEASE_INODE; // Func_Num
+	R2 = currentPID; // PID
+	R4 = i; //Inode_Table_Idx
+	call MOD_0;
+	restore;
+
+	R0 = temp; //Returning Open_File_table_Index
+	return;
+
+endif;
+
+// ****
+
+// *** CLOSE FUNCTION *** 
+
+if(R1 == CLOSE) then
+
+alias Open_File_Entry R11;
+	Open_File_Entry = OPEN_FILE_TABLE + Nam_Idx * 4;
+alias File_Status_Table_Entry R12;
+
+
+i = [Open_File_Entry];// Inode_Table_Idx	
+File_Status_Table_Entry = FILE_STATUS_TABLE + i * 4;
+	
+//Decrementing the Open_Instance_Count
+	[Open_File_Entry + 1] = [Open_File_Entry + 1] - 1;
+
+// *** If Open_Instance_Count founds to be 0
+	if([Open_File_Entry + 1] == 0) then
+
+// Invalidating Open_File_Table_Entry
+		[Open_File_Entry] = -1;
+		[Open_File_Entry + 1] = -1;
+		[Open_File_Entry + 2] = -1;
+		[Open_File_Entry + 3] = -1;	
+
+		if([INODE_TABLE + i * 16 + 1] != "root") then
+			[File_Status_Table_Entry + 1] = [FILE_STATUS_TABLE + i * 4 + 1] - 1;
+			if([File_Status_Table_Entry + 1] == 0) then 				
+				[File_Status_Table_Entry + 1] = -1;
+			endif;
+		endif;
+	endif;
+
+// ****
+	return ;
+endif;
+
+// ****
+
+// *** BUFFERED_READ ***
+
+if(R1 == BUFFERED_READ) then
+	alias buffer_Number R11;
+		buffer_Number = Disk_Block_Num % 4;
+
+	alias Buffer_Table_Entry R12;
+		Buffer_Table_Entry = BUFFER_TABLE + buffer_Number * 4;
+
+	//Calling RMM to Acquire Buffer 
+	backup;
+	R1 = ACQUIRE_BUFFER;//Func_Num
+	R2 = currentPID;
+	R5 = buffer_Number;//Buffer_Number
+	call MOD_0;//Calling RMM
+	restore;
+
+	if([Buffer_Table_Entry] != Disk_Block_Num) then
+		if([Buffer_Table_Entry + 1] == 1) then //Check dirty_bit
+
+			backup;
+			R1 = DISK_STORE; //Func_Num
+			R2 = currentPID ; // PID
+			R4 = 71 + buffer_Number; //As Buffer_Table lies in Memory_Page [71-74];
+			R5 = [Buffer_Table_Entry];
+			call MOD_4;
+			restore;
+
+			[Buffer_Table_Entry + 1] = 0;
+			// Marking the buffer as clean
+
+		endif;
+
+		//Calling DMM to Load Required Disk_block
+
+		backup;
+		R1 = DISK_LOAD; //Func_Num
+		R2 = currentPID; //PID
+		R4 = 71 + buffer_Number;//Page_Number
+		R5 = Disk_Block_Num; 
+		call MOD_4;
+		restore;
+
+		breakpoint;
+		[Buffer_Table_Entry] = Disk_Block_Num; //Setting the New_Disk_Block_Num
+	endif;
+
+	[[PTBR + 2 * (mem_Addr/512)] * 512 + (mem_Addr) % 512] = [(71 + buffer_Number) * 512 + Offset];
+
+	backup;
+	R1 = RELEASE_BUFFER;//Func_Num
+	R2 = currentPID; //PID
+	R5 = buffer_Number;// Buffer_Number
+	call MOD_0; //calling RMM
+	restore;
+
+return ;
+
+endif;
+// ****
+
+// ************_______________*************

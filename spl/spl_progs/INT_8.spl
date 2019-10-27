@@ -4,34 +4,33 @@ breakpoint;
 alias  UserSP R3;
 UserSP = SP;
 
+alias i R10;
+	i = PROCESS_TABLE + [SYSTEM_STATUS_TABLE + 1] * 16;
+
 // User_Stack UPTR
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
+[i + 13] = SP;
 
 //Set Mode_Flag
-[PROCESS_TABLE +([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 8; 
-
+[i + 9] = 8; 
 
 // Kernel_Stack (KPTR)
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+SP = [i + 11] * 512 - 1;
 
-alias i R10;
+alias Return_Value R15;
+	Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + ((UserSP - 1) % 512);
 
 backup;
 
 // *** Invoke Get_Pcb_Entry ***
 	R1 = 1;
 	call MOD_1;
-	
-//	backup;
-//	print R0;
-//	print ":->";
-//	restore;
 
-	breakpoint;
+breakpoint;
+// *** If No Free PCB_Enry Found ***
 	if(R0 == -1) then
-		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + ((UserSP - 1) % 512)] = -1;
-		[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
-		SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13];
+		[Return_Value] = -1; // Return_Value as -1
+		[i + 9] = 0; // Switching Back to User_Mode
+		SP = [i + 13]; // Setting User_Stack 
 		ireturn;
 	else
 	// PID of child
@@ -45,9 +44,8 @@ alias parent_Page_Table R4;
 alias child_Page_Table R5;
 	child_Page_Table = PAGE_TABLE_BASE + (R0 * 20); 
 	
-backup;
 // *** Allocating Heap Pages For Process ***
-		if([PTBR + 4] == -1) then
+		if([parent_Page_Table + 4] == -1) then
 			backup;
 			R1 = GET_FREE_PAGE;
 			call MOD_2;
@@ -64,9 +62,6 @@ backup;
 
 		endif;
 // ****
-restore;
-
-breakpoint;
 
 // *** Allocating Stack Pages and User_Area_Page For Child ***
 		
@@ -76,7 +71,7 @@ alias child_Process_Table_Entry R6;
 
 // Parent PROCESS_TABLE
 alias parent_Process_Table_Entry R7;
-	parent_Process_Table_Entry = PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16);			
+	parent_Process_Table_Entry = i;			
 
 
 		backup;
@@ -124,8 +119,9 @@ alias parent_Process_Table_Entry R7;
 	alias child_Base_RT R13;
 		child_Base_RT = ([PROCESS_TABLE + R0 * 16 + 11] + 1 )* 512 - 16;
 	alias parent_Base_RT R14;
-		parent_Base_RT = ([PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] + 1 )* 512 - 16;
+		parent_Base_RT = ([i + 11] + 1)* 512 - 16;
 
+// *** Semaphore_Table *** 
 	i = 0;
 	alias Sem_ID R8;
 	while(i < 16) do
@@ -137,6 +133,24 @@ alias parent_Process_Table_Entry R7;
 		endif;
 		i = i + 2;	
 	endwhile;
+
+// ****
+
+// *** Open_File_Table *** 
+
+	i = 0;
+	alias Idx R8;
+	while(i < 16) do
+		[child_Base_RT + i] = [parent_Base_RT + i];
+		[child_Base_RT + i + 1] = [parent_Base_RT + i + 1];
+		Idx = [parent_Base_RT + i + 1];
+		if([parent_Base_RT + i] != -1 && [parent_Base_RT + i] == FILE) then
+			[OPEN_FILE_TABLE + 4 * Idx + 1] =  [OPEN_FILE_TABLE + 4 * Idx + 1] + 1;// Incrementing Process count as Child is sharing the semaphore
+		endif;
+		i = i + 2;	
+	endwhile;
+	
+// ****
 		
 	
 // *** Initialization Of Per_Prcess_Disk_Map_Table ***
@@ -209,7 +223,7 @@ alias parent_Stack R12;
 	[[R5 + 2 * ((R12 - 1)/512)] * 512 + (R12 - 1) % 512] = 0;
 
 // return Value For Parent_Process as child_PID
-	[[R4 + 2 * ((R11 - 1)/512)]*512 + (R11 - 1)%512] = [R6 + 1];
+	[Return_Value] = [R6 + 1];
 
 endif;
 
@@ -217,7 +231,7 @@ endif;
 
 	//setting Mode_Flag to 0
 		[R7 + 9] = 0;
-restore;
+	restore;
 	SP = R3;
 	
 ireturn;

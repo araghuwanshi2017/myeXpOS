@@ -1,5 +1,5 @@
 
-//*********************************** MODULE 7 (BOOT MODULE)********************
+//*********************************** MODULE 7 (BOOT MODULE)***************************************
 
 // *** Disk To Memory Loading ***
 
@@ -24,6 +24,10 @@ loadi(9 , 22);
 // *** Load INT 4 ***
 loadi(10 , 23);
 loadi(11 , 24);
+
+// *** Load INT 5 ***
+loadi(12 , 25);
+loadi(13 , 26);
 
 // *** Load INT 6 ***
 loadi(14 , 27);
@@ -77,6 +81,10 @@ loadi(43 , 56);
 loadi(44 , 57);
 loadi(45 , 58);
 
+// Module 3 (File Manager) ***
+loadi(46 , 59);
+loadi(47 , 60);
+
 // Module 4 (Device Manager) ***
 loadi(48 , 61);
 loadi(49 , 62);
@@ -105,9 +113,7 @@ loadi(66 , 8);
 
 // Loading Done ********
 
-
-
-
+// *** Initialization of Init_Process  ***
 
 PTBR = PAGE_TABLE_BASE + 20;
 PTLR = 10;
@@ -129,7 +135,7 @@ PTLR = 10;
 //Code
 [PTBR + 8] = 65;
 [PTBR + 9] = "0100";
-[PTBR + 10] = -1;
+[PTBR + 10] = 66;
 [PTBR + 11] = "0000";
 [PTBR + 12] = -1;
 [PTBR + 13] = "0000";
@@ -155,13 +161,17 @@ PTLR = 10;
 [PROCESS_TABLE  + 16 + 14] = PAGE_TABLE_BASE + 20;
 [PROCESS_TABLE  + 16 + 15] = 10;
 
+// ****
+
+// *** Setting all the processes as TERMINATED except Idle and Init
 alias counter R0;
 counter = 2;
 while(counter <= 15) do
 	[PROCESS_TABLE + counter * 16 + 4] = TERMINATED;
 	counter = counter + 1;
 endwhile;
-counter = 76;
+
+// ****
 
 // *** Used_Pages ***
 
@@ -258,7 +268,18 @@ endwhile;
 	endwhile;
 
 // ****
-			
+
+// *** Initialization of Open_File_table ***
+
+	counter = 0;
+	while(counter < MAX_OPENFILE_NUM) do	
+		[OPEN_FILE_TABLE + counter * 4] = -1; //Setting Inode_Index as -1
+		[OPEN_FILE_TABLE + counter * 4 + 1] = 0; //Initializing Open_Instance_Count to 0
+		
+		counter = counter + 1;
+	endwhile;
+// ****
+	
 return;
 	
 // *********__________*********

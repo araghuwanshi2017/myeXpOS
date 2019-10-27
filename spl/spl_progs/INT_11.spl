@@ -30,6 +30,7 @@ if(R1 == 13) then
 	if((R3 == R2) || ([PROCESS_TABLE + (R2 * 16) + 4] == TERMINATED ) || (R2 < 1 && R2 > MAX_PROC_NUM)) then
 		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Return Value as Failure
 		[PROCESS_TABLE + R3 * 16 + 9] = 0; // Resetting Mode_Flag to 0
+		restore;
 		SP = [PROCESS_TABLE + R3 * 16 + 13]; // Switch to User_Stack 
 		ireturn ;
 	endif;
