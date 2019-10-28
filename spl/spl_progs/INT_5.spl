@@ -1,0 +1,150 @@
+//*********************************** INTERRRUPT 5 (SEEK , OPEN , CLOSE SYSTEM CALLS) **************************************
+
+
+alias UserSP R0;
+	UserSP = SP;
+
+
+//Extracting System_Call_Number	
+alias sys_Call_Num R1;
+	sys_Call_Num = [[PTBR +2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+
+// Pid Of Process
+alias currentPID R2;
+	currentPID = [SYSTEM_STATUS_TABLE + 1];
+
+// Saving User_Stack UPTR
+[PROCESS_TABLE + currentPID * 16 + 13] = SP;
+
+//Switch to Kernel_Stack (KPTR)
+	SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;
+
+
+// Setting Mode_Flag equal to System_Call_Number
+	[PROCESS_TABLE + currentPID * 16 + 9] = sys_Call_Num;
+
+// Address For Return_Value
+	alias Return_Value R3;
+		Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
+
+// Base Pointer Of Per_Process_Resource_Table
+	alias Base_RT R4;
+		Base_RT = ([PROCESS_TABLE + currentPID * 16 + 11] + 1) * 512 - 16;
+
+
+alias i R5;
+alias tmp R7;
+// *** Open_System_Call ***
+
+if(R1 == 2) then
+
+
+	alias file_Name R6;
+		file_Name = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+
+	i = 0;
+	while(i < 16) do
+		if([Base_RT + i] == -1) then
+			break;
+		endif;
+		i = i + 2;
+	endwhile;
+
+// *** Process has reached its limit of resources ***
+	if(i == 16) then
+
+		[Return_Value] = -3; // Process has reached its limit of resources
+		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
+		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+
+		ireturn;
+	endif;
+
+// **** 
+
+// *** Found Free_Entry and Calling Open_Function in FMM ***
+	backup;
+	R1 = OPEN; //Func_Num is 3
+	R2 = file_Name; //File Name To be Open
+	call MOD_3;
+
+	if(R0 == -1 || R0 == -2) then
+		[Return_Value] = R0; // No Inode_Free Entry or No Open_File_Entry
+		restore;
+		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
+		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		ireturn;
+
+	endif;
+// *** Setting the Per_Process_Resource_Table_Entry ***
+	[Base_RT + i] = FILE; //Resource_Id
+	[Base_RT + i + 1] = R0; //Open_File_Table_Idx
+
+// ****
+	restore;
+	[PROCESS_TABLE + currentPID * 16 + 9] = 0;//Setting Mode_Flag to 0;
+	SP = UserSP; //User_Stack;
+
+//*** The index of this entry is the File Descriptor of the file *** 
+	[Return_Value] = [Base_RT + i + 1]; //Success 
+	ireturn;
+endif;
+
+// ****
+
+// *** Close_System_Call ***
+
+if(R1 == 3) then
+	
+	alias file_Descriptor R6;
+		file_Descriptor = [[PTBR + 2 * ((UserSP - 4)/512)] + (UserSP - 4) % 512];
+
+// *** If File_Descriptor Is Found to be Invalid ***
+
+	if(file_Descriptor < 0 || file_Descriptor > 7) then
+		[Return_Value] = -1; // File_Descriptor is Invalid;
+		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
+		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		ireturn;
+
+	endif;
+
+// ****
+
+// *** No file is open with this file descriptor ***
+
+	if(([Base_RT + file_Descriptor * 2] == -1) ||([Base_RT + file_Descriptor * 2] != FILE)) then
+		[Return_Value] = -1; // There is No File with this File_Descriptor
+		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
+		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		ireturn;
+
+	endif;	
+
+// ****
+
+						
+	i = [Base_RT + 2 * file_Descriptor + 1]; // Open_File_Table_Index
+
+	backup;
+	R1 = CLOSE; //Func_Num for Close
+	R2 = i;//Open_File_Table_Index
+	call MOD_3; //Calling FMM
+	restore;
+
+// *** Invalidating Resource_Table Entry ***
+
+	[Base_RT + 2 * file_Descriptor] = -1;
+	[Base_RT + 2 * file_Descriptor + 1] = -1;
+
+// ****
+	
+	[PROCESS_TABLE + currentPID * 16 + 9] = 0;//Setting Mode_Flag to 0;
+	SP = UserSP; //User_Stack;
+
+
+	[Return_Value] = 0; //Success 
+
+	ireturn;
+
+endif;
