@@ -1,55 +1,202 @@
-
 //*********************************** INTERRUPT 7 (WRITE SYSTEM CALL) *************************************
 
-
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 5;
-
 alias userSP R0;
+alias fileDescriptor R1;
+alias currentPID R2;
+alias word R3;
+alias Return_Value R4;
+alias process_Table_Entry R5;
+alias Base_RT R6;
+alias open_File_Idx R7;
+alias inode_Idx R8;
+alias open_File_Table_Entry R9;
+alias inode_Table_Entry R10;
+alias pos_lseek R11;
+
 userSP = SP;
+fileDescriptor = [[PTBR + 2 *((userSP - 4)/512)] * 512 + (userSP - 4) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+word = [[PTBR + 2 * ((userSP - 3) / 512)] * 512 + ((userSP - 3) % 512)];
+Return_Value = [PTBR + 2 * ((userSP - 1)/512)] * 512 + (userSP - 1) % 512;
+process_Table_Entry = PROCESS_TABLE + currentPID * 16 ;
 
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
+//Setting the Mode_Flag 
+[process_Table_Entry + 9] = 5;
 
+//Saving UPTR
+[process_Table_Entry + 13] = SP;
 
 //Setting SP to UArea Page Number * 512 - 1;
+SP = [process_Table_Entry + 11] * 512 - 1;
 
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+// *** Write_System_Call ***
 
-alias physicalPageNum R1;
-alias offset R2;
-alias fileDescPhysicalAddr R3;
-physicalPageNum = [PTBR + 2 * ((userSP - 4)/ 512)];
-offset = (userSP - 4) % 512;
-fileDescPhysicalAddr = (physicalPageNum * 512) + offset;
-alias fileDescriptor R4;
-fileDescriptor=[fileDescPhysicalAddr];
+if (fileDescriptor == -2) then
 
-if (fileDescriptor != -2) then
-
-	 alias physicalAddrRetVal R5;
-	 physicalAddrRetVal = ([PTBR + 2 * ((userSP - 1) / 512)] * 512) + ((userSP - 1) % 512);
-	 [physicalAddrRetVal] = -1;
-else
-	alias word R6;
-	word = [[PTBR + 2 * ((userSP - 3) / 512)] * 512 + ((userSP - 3) % 512)];
 
 	backup;
-	R1 = 3;
-	R2 = [SYSTEM_STATUS_TABLE + 1];
-	R3 = word;
-
-	//Calling Device Manager
-	call MOD_4;
+	R1 = TERMINAL_WRITE ; //Func_Num
+	R2 = currentPID ; //PID
+	R3 = word ; // Word to be written
+	call MOD_4 ; //Calling DMM
 	restore;
+
+	[Return_Value] = 0 ;//Indicating Success
+
+else
+
+	if(fileDescriptor < 0 || fileDescriptor > 7) then //Invalid fileDescriptor
+		[process_Table_Entry + 9] = 0;//Switching back to User_Mode
+		SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+		[Return_Value] = -1; // Invalid fileDescriptor
+		ireturn ;
+
+	else
+		Base_RT = ([process_Table_Entry + 11] + 1) * 512 - 16;//Base_Pointer Of PPRT
+
+		if([Base_RT + 2 * fileDescriptor] != FILE) then
+			[process_Table_Entry + 9] = 0;     //Switching back to User_Mode
+			SP = [process_Table_Entry + 13];  //Switch To User_Stack 
+			[Return_Value] = -1;             // No_File is open With this fileDescriptor
+			ireturn ;
+
+		else
+
+			open_File_Idx = [Base_RT + 2 * fileDescriptor + 1];  //Open_File_Table_Index
+			open_File_Table_Entry = OPEN_FILE_TABLE + open_File_Idx * 4;
+
+			inode_Idx = [open_File_Table_Entry];                //Inode_Index From OPEN_FILE_TABLE_Entry;
+			inode_Table_Entry = INODE_TABLE + inode_Idx * 16;
+
+			// If the current user is not root and the current user does not own the file and the exclusive permission is set
+			if([process_Table_Entry + 3] != 1) then
+
+				if([inode_Table_Entry + 3] != [process_Table_Entry + 3]) then //UserID	
+
+					if([inode_Table_Entry + 4] == EXCLUSIVE) then //Exclusive_Permission
+
+						[Return_Value] = -3;               //Return_Value as Failure
+						[process_Table_Entry + 9] = 0;    //Switching back tp User_Mode
+						SP = [process_Table_Entry + 13]; //Switch To User_Stack 
+						
+						ireturn ;
+					endif;
+
+				endif;
+
+			endif;	
+ 
+// ***  Calling RMM For Acquiring Inode ***
+			backup;
+			R1 = ACQUIRE_INODE;  //Func_Num
+			R2 = currentPID ;    //PID
+			R4 = inode_Idx;      //Inode_Index
+			call MOD_0;          //Calling RMM
 	
-	alias physicalAddrRetVal R6;
-	physicalAddrRetVal = ([PTBR + 2 * ((userSP - 1)/ 512)] * 512) + ((userSP - 1) % 512);
-	[physicalAddrRetVal] = 0;
+
+			if(R0 == -1) then
+				restore;
+				[process_Table_Entry + 9] = 0;     //Switching back tp User_Mode
+				SP = [process_Table_Entry + 13];  //Switch To User_Stack 
+				[Return_Value] = -1;             // Fails to Acquire_Inode
+				ireturn ;
+
+			endif;
+
+			restore;
+
+// **** Inode_Acquired ****
+			
+			pos_lseek = [open_File_Table_Entry + 2]; //LSEEK Value From OPEN_FILE_TABLE_Entry
+
+// *** lseek Value reached its Max_Value ***
+
+			if(pos_lseek == 2048) then 
+
+					backup;
+					R1 = RELEASE_INODE; //Func_Num
+					R2 = currentPID;   //PID
+					R4 = inode_Idx;   //Inode_Index From OPEN_FILE_TABLE_Entry;
+					call MOD_0;      //Calling RMM
+					restore;
+
+					[process_Table_Entry + 9] = 0;      //Switching back tp User_Mode
+					SP = [process_Table_Entry + 13];   //Switch To User_Stack 
+					[Return_Value] = -2;              // pos_lseek = 2048 (Max_File_Size_Reached)
+					ireturn ;				
+			endif;
+// ****
+
+			if(pos_lseek % 512 == 0 && pos_lseek == [inode_Table_Entry + 2]) then
+
+				backup;
+				R1 = GET_FREE_BLOCK; //Func_Num
+				call MOD_2;
+
+				if(R0 == -1) then // No Free_Block Available
+					restore;
+
+					backup;
+					R1 = RELEASE_INODE; //Func_Num
+					R2 = currentPID;   //PID
+					R4 = inode_Idx;   //Inode_Index From OPEN_FILE_TABLE_Entry;
+					call MOD_0;
+					restore;
+
+					[process_Table_Entry + 9] = 0;     //Switching back tp User_Mode
+					SP = [process_Table_Entry + 13];  //Switch To User_Stack 
+					[Return_Value] = -2;             // No Free_Block Found
+					ireturn ;
+
+				endif;
+
+				[inode_Table_Entry + 8 + (pos_lseek/512)] = R0; //Setting the Free_Disk_Block in Inode_Table
+
+				restore;
+
+			endif;
+
+				backup;
+				R1 = BUFFERED_WRITE;                                //Func_Num
+				R5 = word;                                         //Word
+				R4 = pos_lseek % 512;                             //Offset 
+				R3 = [inode_Table_Entry + 8 + (pos_lseek/512)];  //Disk_Block_Number
+				call MOD_3;                                     //Calling FMM
+				restore;
+
+				if(pos_lseek == [inode_Table_Entry + 2]) then
+					[inode_Table_Entry + 2] = [inode_Table_Entry + 2] + 1;                   //Incrementing the File_Size in inode
+					[ROOT_FILE + inode_Idx * 8 + 1] = [ROOT_FILE + inode_Idx * 8 + 1] + 1;  //Incrementing the File_Size in root
+				endif;
+
+				[open_File_Table_Entry + 2] = [open_File_Table_Entry + 2] + 1; // Incrementing LSEEK value in Open_File_Table_Entry
+
+				// *** Calling Release_Inode In RMM ***
+
+				backup;
+				R1 = RELEASE_INODE;             //Func_Num
+				R2 = currentPID;               //PID
+				R4 = inode_Idx;               //Inode_Index From OPEN_FILE_TABLE_Entry
+				call MOD_0;                  //Calling RMM
+				restore;
+
+				// **** Inode_Released ****		
+
+		endif;
+
+	endif;
+
 endif;
 
+// ****
 
-SP = userSP;
 
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
+
+SP = userSP; //User_Stack
+[process_Table_Entry + 9] = 0; //Mode_Flag
+
+[Return_Value] = 0; // Content Successfully Written into the file
+
 ireturn ;
 
-// ****************
+// *************______________***************

@@ -1,13 +1,40 @@
-load --module 0 $HOME/myexpos/spl/spl_progs/Module_0.xsm
-load --module 4 $HOME/myexpos/spl/spl_progs/Module_4.xsm
-load --module 5 $HOME/myexpos/spl/spl_progs/Module_5.xsm
-load --module 7 $HOME/myexpos/spl/spl_progs/Module_7.xsm
-load --idle $HOME/myexpos/expl/Samples/Idle_Process.xsm
-load --init $HOME/myexpos/expl/Samples/Sort.xsm
-load --int=timer ../spl/spl_progs/Timer_stage14.xsm
-load --int=console $HOME/myexpos/spl/spl_progs/Console_Timer.xsm
-load --int=10 ../spl/spl_progs/Int_10.xsm
-load --int=7 $HOME/myexpos/spl/spl_progs/Int_7.xsm
-load --int=6 $HOME/myexpos/spl/spl_progs/Int_6.xsm
-load --exhandler ../spl/spl_progs/haltprog.xsm
-load --os $HOME/myexpos/spl/spl_progs/OS_startup14.xsm
+fdisk
+load --data ../expl/Samples/Sample.dat
+load --idle ../expl/Samples/Idle_Process.xsm
+load --init ../expl/Samples/S_21_1.xsm
+load --exec ../expl/Samples/Test.xsm
+load --exec ../expl/Samples/S_25_1.xsm
+load --exec ../expl/Samples/S_25_2.xsm
+load --exec ../expl/Samples/S_25_3.xsm
+load --exec ../expl/Samples/S_25_4.xsm
+load --exec ../expl/Samples/S_24_1.xsm
+load --exec ../expl/Samples/S_24_2.xsm
+load --exec ../expl/Samples/Odd.xsm
+load --exec ../expl/Samples/Even.xsm
+load --exec ../expl/Samples/cat.xsm
+load --exec ../expl/Samples/ls.xsm
+load --exec ../expl/Samples/cp.xsm
+load --exec ../expl/Samples/rm.xsm
+load --module 0 ../spl/spl_progs/Module_0_Stage18.xsm
+load --module 1 ../spl/spl_progs/Module_1_Stage17.xsm
+load --module 2 ../spl/spl_progs/Module_2_Stage17.xsm
+load --module 3 ../spl/spl_progs/Module_3.xsm
+load --module 4 ../spl/spl_progs/Module_4_Stage18.xsm
+load --module 5 ../spl/spl_progs/Module_5.xsm
+load --module 7 ../spl/spl_progs/Module_7_Stage17.xsm
+load --int=timer ../spl/spl_progs/Timer_Interrupt.xsm
+load --int=console ../spl/spl_progs/Console_Interrupt.xsm
+load --int=disk ../spl/spl_progs/Disk_Interrupt.xsm
+load --int=4 ../spl/spl_progs/INT_4.xsm
+load --int=5 ../spl/spl_progs/INT_5.xsm
+load --int=6 ../spl/spl_progs/INT_6.xsm
+load --int=7 ../spl/spl_progs/INT_7.xsm
+load --int=8 ../spl/spl_progs/INT_8.xsm
+load --int=9 ../spl/spl_progs/INT_9.xsm
+load --int=10 ../spl/spl_progs/INT_10.xsm
+load --int=11 ../spl/spl_progs/INT_11.xsm
+load --int=13 ../spl/spl_progs/INT_13.xsm
+load --int=14 ../spl/spl_progs/INT_14.xsm
+load --int=15 ../spl/spl_progs/INT_15.xsm
+load --exhandler ../spl/spl_progs/Exception_Interrupt.xsm
+load --os ../spl/spl_progs/OS_Startup17.xsm

@@ -1,0 +1,28 @@
+int main()
+{
+	decl
+		int ret , Permission , inc , fileDesc , data;
+		str filename;
+	enddecl
+
+	begin	
+
+		ret = exposcall("Write" , -2 ,"---String---");
+		ret = exposcall("Read" , -1 , filename);
+
+		ret = exposcall("Write" , -2 ,"--Permission--");
+		ret = exposcall("Read" , -1 , Permission);
+
+		ret = exposcall("Create", filename, Permission);
+		fileDesc = exposcall("Open", filename);
+
+		inc = 1;
+		while(inc < 1101) do
+			ret = exposcall("Write" , fileDesc , inc);
+			inc = inc + 1;
+		endwhile;
+
+		ret = exposcall("Close", filename);
+		return 0;
+	end
+}	

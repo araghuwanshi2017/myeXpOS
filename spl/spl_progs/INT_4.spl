@@ -37,9 +37,9 @@ alias Return_Value R10;
 if(R1 == 1) then
 
 // Setting Mode_Flag Equal to System_Call_Number
-	[process_Table_Entry + 9] = 0;
+	[process_Table_Entry + 9] = 1;
 
-	while(inode_idx < MAX_FILE_NUM) do
+	while(inode_idx < 60) do
 		if([INODE_TABLE + inode_idx * 16 + 1] == R3) then
 			[Return_Value] = 0; // File_already_Exists 
 			[process_Table_Entry + 9] = 0; //Switching back to User_Mode
@@ -55,7 +55,7 @@ if(R1 == 1) then
 	endwhile;
 
 // *** No Free_Entry Available in INODE_TABLE return to User_Mode with Return_Value as -1
-	if(inode_idx == MAX_FILE_NUM) then
+	if(inode_idx == 60) then
 		[Return_Value] = -1; // No Free_Entry Available
         [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
         SP = UserSP;
@@ -101,7 +101,7 @@ alias root_Entry R9;
 // ****
 
 //Switching Back to User_Mode 
-	[PROCESS_TABLE + currentPID * 16 + 9] = 0; ///Satting Mode_Flag as 0;
+	[PROCESS_TABLE + currentPID * 16 + 9] = 0; ///Setting Mode_Flag as 0;
 	
 	[Return_Value] = 0; //Success Return_Value as 0
 	SP = UserSP;
@@ -118,7 +118,7 @@ endif;
 breakpoint;
 if(R1 == 4) then
 	// Setting Mode_Flag Equal to System_Call_Number
-	[process_Table_Entry + 9] = 0;
+	[process_Table_Entry + 9] = 4;
 	
 
 	while(inode_idx < MAX_FILE_NUM) do
@@ -130,7 +130,7 @@ if(R1 == 4) then
 
 // *** File Not Present in the INODE_TABLE 
 	if(inode_idx == MAX_FILE_NUM) then
-		[Return_Value] = 0; // File_Not_Present
+		[Return_Value] = -1; // File_Not_Present
         [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
          SP = UserSP;
 
@@ -142,7 +142,7 @@ if(R1 == 4) then
 
 // *** File is Not_Data_File
 	if(([INODE_TABLE + inode_idx * 16 + 1] == R3) && [INODE_TABLE + inode_idx * 16] != DATA) then
-		[Return_Value] = 0; // File_Not_Present
+		[Return_Value] = -1; // File_Not_Present
         [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
          SP = UserSP;
 
@@ -153,8 +153,8 @@ if(R1 == 4) then
 
 // *** Exclusive_Permission
 		if([INODE_TABLE + inode_idx * 16 + 4] == EXCLUSIVE) then
-			if([INODE_TABLE + inode_idx * 16 + 3] == 0) then
-					[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Exclusive_Permission
+			if([INODE_TABLE + inode_idx * 16 + 3] != [process_Table_Entry + 3] && [process_Table_Entry + 3] != 1) then
+					[Return_Value] = -1; // Exclusive_Permission
 	    	    	[PROCESS_TABLE + R2 * 16 + 9] = 0; //Switching back to User_Mode 
     	    		SP = UserSP;
 
@@ -175,6 +175,7 @@ if(R1 == 4) then
 
 // ****
 
+// Checking the File_Open_Count 
 	if([FILE_STATUS_TABLE + inode_idx * 4 + 1] != -1) then
 		// Releasing Inode
 			backup;
@@ -199,17 +200,17 @@ if(R1 == 4) then
 
 	alias buffer_Number R8;
 
-	while([inode_Table_Entry + i] != -1) do
+	while(i < 12 && [inode_Table_Entry + i] != -1) do
 		buffer_Number = ([inode_Table_Entry + i] % 4);
 		if(([BUFFER_TABLE + buffer_Number * 4] == [inode_Table_Entry + i]) && ([BUFFER_TABLE + buffer_Number * 4 + 1] == 1)) then
 			[BUFFER_TABLE + buffer_Number * 4 + 1] = 0 ;// Resetting the Dirty_Bit to 0; 
-
+		endif;
 			backup;
 			R1 = RELEASE_BLOCK; 
 			R3 = [inode_Table_Entry + i]; // Block_Number to be Released;
 			R6 = R2;
+			call MOD_2;
 			restore;
-		endif;
 		i = i + 1;
 	endwhile;
 

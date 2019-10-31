@@ -95,13 +95,10 @@ loadi(49 , 62);
 loadi(59 , 3);
 loadi(60 , 4);
 
-// ****
-
-// *** Disk_Free_List ***
+// *** Disk_Free_List  and Root_File***
 	
 loadi(61 , 2);
-
-// ****
+loadi(62 , 5);
 
 // *** Library Load ***
 loadi(63 , 13);
@@ -249,7 +246,7 @@ endwhile;
 // *** Initialization of File_Status_Table ***
 
 	counter = 0;
-	while(counter < 16) do
+	while(counter < 60) do
 		[FILE_STATUS_TABLE + counter * 4] = -1;  //Setting Locking_PID as -1
 		[FILE_STATUS_TABLE + counter * 4 + 1] = -1; // Initializing File_Open_Count as -1
 		counter = counter + 1;
@@ -280,6 +277,7 @@ endwhile;
 	endwhile;
 // ****
 	
+
 return;
 	
 // *********__________*********

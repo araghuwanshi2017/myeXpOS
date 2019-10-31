@@ -2,38 +2,27 @@
 
 
 alias UserSP R0;
-	UserSP = SP;
-
-
-//Extracting System_Call_Number	
 alias sys_Call_Num R1;
-	sys_Call_Num = [[PTBR +2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
-
-// Pid Of Process
 alias currentPID R2;
-	currentPID = [SYSTEM_STATUS_TABLE + 1];
-
-// Saving User_Stack UPTR
-[PROCESS_TABLE + currentPID * 16 + 13] = SP;
-
-//Switch to Kernel_Stack (KPTR)
-	SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;
+alias Return_Value R3;
+alias Base_RT R4;
+alias i R5;	
+alias process_Table_Entry R8;
 
 
-// Setting Mode_Flag equal to System_Call_Number
-	[PROCESS_TABLE + currentPID * 16 + 9] = sys_Call_Num;
-
-// Address For Return_Value
-	alias Return_Value R3;
-		Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
-
-// Base Pointer Of Per_Process_Resource_Table
-	alias Base_RT R4;
-		Base_RT = ([PROCESS_TABLE + currentPID * 16 + 11] + 1) * 512 - 16;
+UserSP = SP;                                                                    // Saving User_Stack  
+sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];    //Extracting System_Call_Number
+currentPID = [SYSTEM_STATUS_TABLE + 1];                                       // Pid Of Process
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;   // Address For Return_Value
+Base_RT = ([PROCESS_TABLE + currentPID * 16 + 11] + 1) * 512 - 16;          // Base Pointer Of Per_Process_Resource_Table
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
 
 
-alias i R5;
-alias tmp R7;
+[PROCESS_TABLE + currentPID * 16 + 13] = SP;                 // Saving User_Stack UPTR
+SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;      //Switch to Kernel_Stack (KPTR)
+[PROCESS_TABLE + currentPID * 16 + 9] = sys_Call_Num;      // Setting Mode_Flag equal to System_Call_Number
+
+
 // *** Open_System_Call ***
 
 if(R1 == 2) then
@@ -53,9 +42,9 @@ if(R1 == 2) then
 // *** Process has reached its limit of resources ***
 	if(i == 16) then
 
-		[Return_Value] = -3; // Process has reached its limit of resources
-		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
-		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		[Return_Value] = -3;               // Process has reached its limit of resources
+		[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; // Setting User_Stack 
 
 		ireturn;
 	endif;
@@ -64,30 +53,31 @@ if(R1 == 2) then
 
 // *** Found Free_Entry and Calling Open_Function in FMM ***
 	backup;
-	R1 = OPEN; //Func_Num is 3
-	R2 = file_Name; //File Name To be Open
+	R1 = OPEN;        //Func_Num is 3
+	R2 = file_Name;  //File Name To be Open
 	call MOD_3;
 
 	if(R0 == -1 || R0 == -2) then
-		[Return_Value] = R0; // No Inode_Free Entry or No Open_File_Entry
-		restore;
-		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
-		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		[Return_Value] = R0;                //No Inode_Free Entry or No Open_File_Entry
+		restore;						   //Restoring back the registers
+		[process_Table_Entry + 9] = 0;    //Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; //Setting User_Stack 
 		ireturn;
 
 	endif;
 // *** Setting the Per_Process_Resource_Table_Entry ***
-	[Base_RT + i] = FILE; //Resource_Id
+	[Base_RT + i] = FILE;    //Resource_Id
 	[Base_RT + i + 1] = R0; //Open_File_Table_Idx
 
 // ****
 	restore;
-	[PROCESS_TABLE + currentPID * 16 + 9] = 0;//Setting Mode_Flag to 0;
-	SP = UserSP; //User_Stack;
+	[process_Table_Entry + 9] = 0;  //Setting Mode_Flag to 0;
+	SP = UserSP;                   //User_Stack;
 
 //*** The index of this entry is the File Descriptor of the file *** 
-	[Return_Value] = [Base_RT + i + 1]; //Success 
-	ireturn;
+	[Return_Value] = i/2; //Success Returning File_Descriptor
+	ireturn;						   //Returning back to User_Mode
+
 endif;
 
 // ****
@@ -97,14 +87,15 @@ endif;
 if(R1 == 3) then
 	
 	alias file_Descriptor R6;
-		file_Descriptor = [[PTBR + 2 * ((UserSP - 4)/512)] + (UserSP - 4) % 512];
+		file_Descriptor = [[PTBR + 2 * ((UserSP - 4)/512)] * 512  + (UserSP - 4) % 512];
+
 
 // *** If File_Descriptor Is Found to be Invalid ***
 
 	if(file_Descriptor < 0 || file_Descriptor > 7) then
-		[Return_Value] = -1; // File_Descriptor is Invalid;
-		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
-		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		[Return_Value] = -1;               // File_Descriptor is Invalid;
+		[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; // Setting User_Stack 
 		ireturn;
 
 	endif;
@@ -114,9 +105,9 @@ if(R1 == 3) then
 // *** No file is open with this file descriptor ***
 
 	if(([Base_RT + file_Descriptor * 2] == -1) ||([Base_RT + file_Descriptor * 2] != FILE)) then
-		[Return_Value] = -1; // There is No File with this File_Descriptor
-		[PROCESS_TABLE + (currentPID * 16) + 9] = 0; // Switching Back to User_Mode
-		SP = [PROCESS_TABLE + (currentPID * 16) + 13]; // Setting User_Stack 
+		[Return_Value] = -1;               // There is No File with this File_Descriptor
+		[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; // Setting User_Stack 
 		ireturn;
 
 	endif;	
@@ -127,8 +118,8 @@ if(R1 == 3) then
 	i = [Base_RT + 2 * file_Descriptor + 1]; // Open_File_Table_Index
 
 	backup;
-	R1 = CLOSE; //Func_Num for Close
-	R2 = i;//Open_File_Table_Index
+	R1 = CLOSE;   //Func_Num for Close
+	R2 = i;      //Open_File_Table_Index
 	call MOD_3; //Calling FMM
 	restore;
 
@@ -139,12 +130,105 @@ if(R1 == 3) then
 
 // ****
 	
-	[PROCESS_TABLE + currentPID * 16 + 9] = 0;//Setting Mode_Flag to 0;
-	SP = UserSP; //User_Stack;
-
-
-	[Return_Value] = 0; //Success 
-
-	ireturn;
+	[process_Table_Entry + 9] = 0;  //Setting Mode_Flag to 0;
+	[Return_Value] = 0;            //Success 
+	SP = UserSP;                  //User_Stack;
+	ireturn;                     //Returning back to User_Mode
 
 endif;
+
+// ****
+
+// *** Seek_System_Call(Final_Version) ***
+
+if(R1 == 6) then 
+	
+	alias offset R5;
+	alias fileDescriptor R6;
+	alias Open_File_Table_Idx R7;
+	alias Open_File_Table_Entry R9; 
+	alias inode_Idx R10;
+	alias inode_Table_Entry R11; 
+	alias pos_lseek R12;
+
+	offset = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
+	fileDescriptor = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+	Open_File_Table_Idx = [Base_RT + 2 * fileDescriptor + 1];
+	Open_File_Table_Entry = OPEN_FILE_TABLE + Open_File_Table_Idx * 4;
+	inode_Idx = [Open_File_Table_Entry];
+	inode_Table_Entry = INODE_TABLE + inode_Idx * 16;
+
+	if(fileDescriptor < 0 || fileDescriptor > 7 || [Base_RT + 2 * fileDescriptor] != FILE) then
+
+		[Return_Value] = -1;               // File_Descriptor is Invalid;
+		[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; // Setting User_Stack 
+		ireturn;
+	endif;
+
+	// Calling Acquire_Inode in RMM
+	backup;
+	R1 = ACQUIRE_INODE;    //Func_Num
+	R2 = currentPID;      //PID
+	R4 = inode_Idx ;	 // Inode_Index
+	call MOD_0;         //Calling RMM
+
+	if(R0 == -1) then
+		restore;
+		[Return_Value] = -1;               // No Free_Inode Entry available;
+		[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+		SP = [process_Table_Entry + 13]; // Setting User_Stack 
+		ireturn;		
+	endif;
+
+	restore;
+
+	pos_lseek = [Open_File_Table_Entry + 2];  //Lseek value from OPEN_FILE_TABLE
+
+	if(inode_Idx == INODE_ROOT) then
+		if((pos_lseek + offset) < 0) then
+
+			backup;
+			R1 = RELEASE_INODE; //Func_Num
+			R2 = currentPID;   //PID
+			R4 = inode_Idx;   //Inode_Index From OPEN_FILE_TABLE_Entry;
+			call MOD_0;      //Calling RMM
+			restore;
+
+			[Return_Value] = -2;               // File_Size exceeds Root_File_Size;
+			[process_Table_Entry + 9] = 0;    // Switching Back to User_Mode
+			SP = [process_Table_Entry + 13]; // Setting User_Stack 
+			ireturn;
+		endif;
+
+	endif;
+
+	if(offset == 0) then
+		[Open_File_Table_Entry + 2] = 0; //Initializing lseek_Value to 0
+	else
+		if((pos_lseek + offset) > [inode_Table_Entry + 2]) then
+			[Open_File_Table_Entry + 2] = [inode_Table_Entry + 2]; //Changing lseek_Value to file_Size
+		else
+			[Open_File_Table_Entry + 2] = (pos_lseek + offset); //Changing lseek_Value
+
+		endif;
+
+	endif;
+
+	backup;
+	R1 = RELEASE_INODE; //Func_Num
+	R2 = currentPID;   //PID
+	R4 = inode_Idx;   //Inode_Index From OPEN_FILE_TABLE_Entry;
+	call MOD_0;      //Calling RMM
+	restore;
+
+	[process_Table_Entry + 9] = 0;  //Setting Mode_Flag to 0;
+	[Return_Value] = 0;            //Success 
+	SP = UserSP;                  //User_Stack;
+	ireturn;                     //Returning back to User_Mode
+
+endif;
+
+// ****	
+
+// *************_______________***************

@@ -1,49 +1,84 @@
 // ************************** INTERRUPT 15 (SHUTDOWN SYSTEM CALL) ************************
 
 alias UserSP R0;
-	UserSP = SP;
-
 alias sys_Call_Number R1;
-	sys_Call_Number = [[PTBR + 2 * ((UserSP - 5)/512)] + (UserSP - 5) % 512];
-
 alias currentPID R2;
-	currentPID = [SYSTEM_STATUS_TABLE + 1];
+alias process_Table_Entry R3;
+alias tmp R4;
 
-// Setting the Mode_Flag equal to System_Call_Number
-[PROCESS_TABLE + currentPID * 16 + 9] = sys_Call_Number;
+UserSP = SP;
+sys_Call_Number = [[PTBR + 2 * ((UserSP - 5)/512)] + (UserSP - 5) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
 
-//Saving User_Stack (UPTR)
-[PROCESS_TABLE + currentPID * 16 + 13] = SP;
 
-//Switching to Kernel_Stack (KPTR)
-SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;
+[process_Table_Entry + 9] = sys_Call_Number;   // Setting the Mode_Flag equal to System_Call_Number
+[process_Table_Entry + 13] = SP;              //Saving User_Stack (UPTR)
+SP = [process_Table_Entry + 11] * 512 - 1;   //Switching to Kernel_Stack (KPTR)
 
-// If Current_Process is Not Root_User
+
+
+// *** If Current_Process is Not Root_User ***
 	if([PROCESS_TABLE + currentPID * 16 + 3] != 1) then
 		if(currentPID != 1) then
 			[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1;
-			[PROCESS_TABLE + currentPID * 16 + 9] = 0;
+			[process_Table_Entry + 9] = 0;
 			SP = UserSP;
 			ireturn ;
 
 		endif;
+
 	endif;
+
+// ****
+
+// *** Invoking Resource_Manager_Module ***
+
+	backup;
+	R1 = KILL_ALL;     //Func_Num
+	R2 = currentPID;  //PID
+	call MOD_1;      //Calling PMM
+	restore;
+
+// ****
+
+// *** For_Every_Valid Entry checking the Buffer_Table ***
+
+	tmp = 0;
+	while(tmp < 4) do
+		alias Disk_Block_Num R5;
+			Disk_Block_Num = [BUFFER_TABLE + tmp * 4];
+		if((Disk_Block_Num != -1) && [BUFFER_TABLE + tmp * 4 + 1] == 1) then
+			backup;
+			R1 = DISK_STORE;         //Func_Num
+			R2 = currentPID;        //PID
+			R4 = 71 + tmp;         //Page_Number
+			R5 = Disk_Block_Num;  //Disk_Block
+			call MOD_4;
+			restore;
+		endif;
+
+		tmp = tmp + 1;
+
+	endwhile;
+
+// ****
 
 // *** Memory_Copies Of The Inode_Table ***
 
 		backup;
-		R1 = DISK_STORE;
-		R2 = currentPID;
-		R4 = 59; // Page_Number;
-		R5 = 3; // Block_Number;
+		R1 = DISK_STORE;   //Func_Num
+		R2 = currentPID;  //PID
+		R4 = 59;         //Page_Number;
+		R5 = 3;         // Block_Number;
 		call MOD_4;
 		restore;
 
 		backup;
-		R1 = DISK_STORE;
-		R2 = currentPID;
-		R4 = 60; // Page_Number;
-		R5 = 4; // Block_Number;
+		R1 = DISK_STORE;    //Func_Num
+		R2 = currentPID;   //PID
+		R4 = 60;          //Page_Number;
+		R5 = 4;          // Block_Number;
 		call MOD_4;
 		restore;
 // ****
@@ -51,10 +86,10 @@ SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;
 // *** Memory_Copies Of The Root_File ***
 
 		backup;
-		R1 = DISK_STORE;
-		R2 = currentPID;
-		R4 = 62; // Page_Number;
-		R5 = 5; // Block_Number;
+		R1 = DISK_STORE;    //Func_Num
+		R2 = currentPID;   //PID
+		R4 = 62;          //Page_Number;
+		R5 = 5;          // Block_Number;
 		call MOD_4;
 		restore;
 
@@ -63,15 +98,17 @@ SP = [PROCESS_TABLE + currentPID * 16 + 11] * 512 - 1;
 // *** Memory_Copies Of The Disk_Free_List ***
 
 		backup;
-		R1 = DISK_STORE;
-		R2 = currentPID;
-		R4 = 61; // Page_Number;
-		R5 = 2; // Block_Number;
+		R1 = DISK_STORE;     // Func_Num
+		R2 = currentPID;    //PID
+		R4 = 61;           //Page_Number;
+		R5 = 2;           // Block_Number;
 		call MOD_4;
 		restore;
 // ****
 
 halt;
 
-// ***********_____________*************
+// ***************________________****************
+
+
 

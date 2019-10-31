@@ -21,18 +21,6 @@ SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
 	restore;
 
 // ****
-counter = 1;
-while(counter <= 15) do
-	if([PROCESS_TABLE + counter * 16 + 4] != TERMINATED) then
-		backup;
-		call MOD_5;
-		restore;
-	endif;
-	counter = counter + 1;
-
-
-endwhile;
-
 if(counter == 16) then
 	halt;
 endif;

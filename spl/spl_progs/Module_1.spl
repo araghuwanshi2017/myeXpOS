@@ -10,6 +10,8 @@
 alias func_Num R1;
 alias currentPID R2;
 
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+
 if(R1 == GET_PCB_ENTRY) then
 	alias i R0;
 	i = 0;
@@ -31,7 +33,7 @@ endif;
 if(R1 == FREE_USER_AREA_PAGE) then
 	backup;
 	alias Base_RT R4;
-		Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1)* 512 - 16; // Base_Entry Of Per_Process_Resource_Table
+		Base_RT = ([PROCESS_TABLE + currentPID * 16 + 11] + 1)* 512 - 16; // Base_Entry Of Per_Process_Resource_Table
 	
 	alias i R3;
 	i = 0;
@@ -68,6 +70,7 @@ if(R1 == FREE_USER_AREA_PAGE) then
 	return;
 endif;
 
+// *** EXIT_PROCESS ***
 if(R1 == EXIT_PROCESS) then
 
 	if([PROCESS_TABLE + R2 * 16 + 9] != 9) then
@@ -108,8 +111,12 @@ breakpoint;
 // ****
 	[PROCESS_TABLE + (currentPID * 16) + 4] = TERMINATED;	
 	return;
+
 endif;
 
+// ****
+
+// *** FREE_PAGE_TABLE ***
 if(R1 == FREE_PAGE_TABLE) then
 	backup;
 	PTBR = PAGE_TABLE_BASE + (currentPID * 20);
@@ -140,49 +147,49 @@ if(R1 == FREE_PAGE_TABLE) then
 
 	restore;
 
+// ****
+
 // *** Invalidating Heap and Stack Entries From DISK_MAP_TABLE ***
 
 // *** Heap ***
 
-	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 2] != -1) then
+	if([DISK_MAP_TABLE + (currentPID * 10) + 2] != -1) then
 		backup;
-		R1 = 4; // Func_Num for RELEASE_BLOCK
-		R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 2]; //BLOCK_NUMBER
-		R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
-		call MOD_2; // Memory_Manager
+		R1 = 4;                                           //Func_Num for RELEASE_BLOCK
+		R3 = [DISK_MAP_TABLE + (currentPID * 10) + 2];   //BLOCK_NUMBER
+		R6 = [SYSTEM_STATUS_TABLE + 1];                 //PID
+		call MOD_2;                                    //Memory_Manager
 		restore;
 	endif;
 	
-	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 3] != -1) then
+	if([DISK_MAP_TABLE + (currentPID * 10) + 3] != -1) then
                 backup;
-                R1 = 4; // Func_Num for RELEASE_BLOCK
-                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 3]; //BLOCK_NUMBER
-                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
-                call MOD_2; // Memory_Manager
+                R1 = 4;                                         // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + (currentPID * 10) + 3]; //BLOCK_NUMBER
+                R6 = currentPID;                              // PID
+                call MOD_2;                                  // Memory_Manager
                 restore;
         endif;
 
 // ***** 
 
-
-
 // *** Stack *** 
 
-	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 8] != -1) then
+	if([DISK_MAP_TABLE + (currentPID * 10) + 8] != -1) then
                 backup;
-                R1 = 4; // Func_Num for RELEASE_BLOCK
-                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 8]; //BLOCK_NUMBER
-                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
-                call MOD_2; // Memory_Manager
+                R1 = 4;                                           // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + (currentPID * 10) + 8];   //BLOCK_NUMBER
+                R6 = currentPID;                                // PID
+                call MOD_2;                                    // Memory_Manager
                 restore;
         endif;
 
-	if([DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 9] != -1) then
+	if([DISK_MAP_TABLE + (currentPID * 10) + 9] != -1) then
                 backup;
-                R1 = 4; // Func_Num for RELEASE_BLOCK
-                R3 = [DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + 9]; //BLOCK_NUMBER
-                R6 = [SYSTEM_STATUS_TABLE + 1]; // PID
-                call MOD_2; // Memory_Manager
+                R1 = 4;                                          // Func_Num for RELEASE_BLOCK
+                R3 = [DISK_MAP_TABLE + (currentPID * 10) + 9];  //BLOCK_NUMBER
+                R6 = currentPID;                               // PID
+                call MOD_2;                                   // Memory_Manager
                 restore;
         endif;
 
@@ -192,7 +199,7 @@ if(R1 == FREE_PAGE_TABLE) then
 	alias counter R3;
 	counter = 0;
 	while(counter < 10) do
-		[DISK_MAP_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 10) + counter] = -1;
+		[DISK_MAP_TABLE + (currentPID * 10) + counter] = -1;
 		counter = counter + 1;
 	endwhile;
 	return ;
@@ -200,4 +207,68 @@ endif;
 
 // ****
 
-// ********_________********
+// *** KILL_ALL (Final_Version) ***
+
+if(R1 == KILL_ALL) then
+	
+	alias i R3;
+	alias inode_Table_Entry R4;
+		
+	i = 1;
+
+	while(i < 60) do
+		inode_Table_Entry = INODE_TABLE + i * 16;
+		if([inode_Table_Entry + 1] == -1) then	
+			break;
+		endif;
+
+		backup;
+		R1 = ACQUIRE_INODE; //Func_Num
+		R2 = currentPID;   // PID
+		R4 = i;           // Inode_Index
+		call MOD_0;      //Calling RMMs
+		restore;
+
+		i = i + 1;
+
+	endwhile;
+
+	i = 2;
+	while(i < 16) do
+		if(i != currentPID) then
+			backup;
+			R1 = EXIT_PROCESS ; //Fuc_Num
+			R2 = i;            //PID
+			call MOD_1;       //Calling PMM
+			restore;
+		endif;
+
+		i = i + 1;
+
+	endwhile;
+
+	i = 1;
+	while(i < 60) do
+		inode_Table_Entry = INODE_TABLE + i * 16;
+		
+		if([inode_Table_Entry + 1] == -1) then	
+			break;
+		endif;
+
+		backup;
+		R1 = RELEASE_INODE; //Func_Num
+		R2 = currentPID;   // PID
+		R4 = i;           // Inode_Index
+		call MOD_0;      //Calling RMMs
+		restore;
+
+		i = i + 1;
+
+	endwhile;
+
+	return ;
+endif;
+
+// ****
+
+// *****************________________******************

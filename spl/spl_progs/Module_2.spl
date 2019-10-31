@@ -71,7 +71,28 @@ endif;
 
 // ****
 
+// *** GET_FREE_BLOCK ***
+
+if(R1 == GET_FREE_BLOCK) then
+	alias block_Num R0;
+		block_Num = DISK_FREE_AREA;
+	while(block_Num < DISK_SWAP_AREA) do
+		if([DISK_FREE_LIST + block_Num] == 0) then
+			[DISK_FREE_LIST + block_Num] = 1;
+			return ;
+		endif;
+		block_Num = block_Num + 1;
+
+	endwhile;
+
+	R0 = -1; // No Free_Block Available
+	return ;
+
+endif;
+// ****
+
 // *** RELEASE_BLOCK ***
+
 if(R1 == RELEASE_BLOCK) then
 	[DISK_FREE_LIST + R3] = 0;
 	return ;

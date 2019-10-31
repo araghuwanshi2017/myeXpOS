@@ -15,6 +15,7 @@ alias functionNum R1;
 alias currentPID R2;
 alias ST_Index R3; 
 alias inode_idx R4;
+
 alias buffer_Number R5;
 alias Buffer_Table_Entry R6;
 
@@ -224,6 +225,7 @@ if(R1 == ACQUIRE_BUFFER) then
 		backup;
 		call MOD_5;
 		restore; 
+		
 	endwhile;
 
 	[Buffer_Table_Entry + 2] = currentPID;//Locking the Buffer
@@ -252,7 +254,8 @@ if(R1 == RELEASE_BUFFER) then
 
 	i = 1;
 	while(i < 16) do	
-		if([process_Table_Entry + 4] == WAIT_BUFFER && [process_Table_Entry + 4] == buffer_Number) then
+		process_Table_Entry = PROCESS_TABLE + i * 16;
+		if([process_Table_Entry + 4] == WAIT_BUFFER && [process_Table_Entry + 5] == buffer_Number) then
 			[process_Table_Entry + 4] = READY;
 		endif;
 

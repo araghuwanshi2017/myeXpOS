@@ -23,34 +23,29 @@ Return_Value = [PTBR + 2 * ((userSP - 1) / 512)] * 512 + ((userSP - 1) % 512);
 process_Table_Entry = PROCESS_TABLE + currentPID * 16;
 
 
-//Saving UPTR 
-[process_Table_Entry + 13] = SP;
-
-// Setting up the Mode_Flag to the Corresponding Syscall_Num for READ
-[process_Table_Entry + 9] = 7;
-
-//Setting SP to UArea Page Number * 512 - 1;
-SP = [process_Table_Entry + 11] * 512 - 1;
+[process_Table_Entry + 13] = SP;             //Saving UPTR 
+[process_Table_Entry + 9] = 7;              // Setting up the Mode_Flag to the Corresponding Syscall_Num for READ
+SP = [process_Table_Entry + 11] * 512 - 1; //Setting SP to UArea Page Number * 512 - 1;
 
 // *** Read_System_call ***
 if (fileDescriptor == -1) then  
 	//Storing the Required Values and Calling DMM
 
 	backup;
-	R1 = 4; // Func_Num
+	R1 = 4;           // Func_Num
 	R2 = currentPID; //PID
-	R3 = word; // Address of Word_To_Be_Read
-	call MOD_4;	//Calling DMM
+	R3 = word;      // Address of Word_To_Be_Read
+	call MOD_4;	   //Calling DMM
 	restore;
 
 	[Return_Value] = 0; // SUCCESS
 
 else
 	
-	if(fileDescriptor < 0 || fileDescriptor > 7) then //Invalid fileDescriptor
-		[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-		SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-		[Return_Value] = -1; // Failure
+	if(fileDescriptor < 0 || fileDescriptor > 7) then  //Invalid fileDescriptor
+		[process_Table_Entry + 9] = 0;                //Switching back tp User_Mode
+		SP = [process_Table_Entry + 13];             //Switch To User_Stack 
+		[Return_Value] = -1;                        // Failure
 		ireturn ;
 
 	else
@@ -58,28 +53,29 @@ else
 		Base_RT = ([process_Table_Entry + 11] + 1) * 512 - 16;
 
 		if([Base_RT + 2 * fileDescriptor] != FILE) then
-			[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-			SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-			[Return_Value] = -1; // No_File is open With this fileDescriptor
+			[process_Table_Entry + 9] = 0;     //Switching back to User_Mode
+			SP = [process_Table_Entry + 13];  //Switch To User_Stack 
+			[Return_Value] = -1;             // No_File is open With this fileDescriptor
 			ireturn ;
 
 		else
-			open_File_Idx = [Base_RT + 2 * fileDescriptor + 1]; //Open_File_Table_Index
-			open_File_Table_Entry = OPEN_FILE_TABLE + open_File_Idx * 4;
-			inode_Idx = [open_File_Table_Entry]; //Inode_Index From OPEN_FILE_TABLE_Entry;
+
+			open_File_Idx = [Base_RT + 2 * fileDescriptor + 1];            //Open_File_Table_Index
+			open_File_Table_Entry = OPEN_FILE_TABLE + open_File_Idx * 4;  //Open_File_Table_Entry
+ 			inode_Idx = [open_File_Table_Entry];                         //Inode_Index From OPEN_FILE_TABLE_Entry;
 
 // ***  Calling RMM For Acquiring Inode ***
 			backup;
-			R1 = ACQUIRE_INODE;//Func_Num
-			R2 = currentPID; //PID
-			R4 = inode_Idx; //Inode_Index;
-			call MOD_0;
+			R1 = ACQUIRE_INODE;      //Func_Num
+			R2 = currentPID;        //PID
+			R4 = inode_Idx;        //Inode_Index;
+			call MOD_0;           //Calling RMM
 
 			if(R0 == -1) then
 				restore;
-				[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-				SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-				[Return_Value] = -1; // Fails to Acquire_Inode
+				[process_Table_Entry + 9] = 0;       //Switching back tp User_Mode
+				SP = [process_Table_Entry + 13];    //Switch To User_Stack 
+				[Return_Value] = -1;               // Fails to Acquire_Inode
 				ireturn ;
 			endif;
 
@@ -87,20 +83,21 @@ else
 // Inode_Acquired ****
 			
 			pos_lseek = [open_File_Table_Entry + 2]; //LSEEK Value From OPEN_FILE_TABLE_Entry
+
 			
 			if(inode_Idx == INODE_ROOT) then
 				if(pos_lseek == 480) then
 
 					backup;
-					R1 = RELEASE_INODE; //Func_Num
-					R2 = currentPID; //PID
-					R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry;
+					R1 = RELEASE_INODE;          //Func_Num
+					R2 = currentPID;            //PID
+					R4 = inode_Idx;            //Inode_Index From OPEN_FILE_TABLE_Entry;
 					call MOD_0;
 					restore;
 
-					[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-					SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-					[Return_Value] = -2; // lseek = 480 (Root_File_Size)
+					[process_Table_Entry + 9] = 0;          //Switching back tp User_Mode
+					SP = [process_Table_Entry + 13];       //Switch To User_Stack 
+					[Return_Value] = -2;                  // lseek = 480 (Root_File_Size)
 					ireturn ;				
 				endif;
 
@@ -109,41 +106,42 @@ else
 
 			else
 
-				if(pos_lseek == [INODE_TABLE + inode_Idx * 16 + 2]) then
+				if(pos_lseek >= [INODE_TABLE + inode_Idx * 16 + 2]) then
 
 					backup;
-					R1 = RELEASE_INODE; //Func_Num
-					R2 = currentPID; //PID
-					R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry;
+					R1 = RELEASE_INODE;      //Func_Num
+					R2 = currentPID;        //PID
+					R4 = inode_Idx;        //Inode_Index From OPEN_FILE_TABLE_Entry;
 					call MOD_0;
 					restore;
 
-					[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-					SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-					[Return_Value] = -2; // lseek = File_Size
+					[process_Table_Entry + 9] = 0 ;       //Switching back tp User_Mode
+					SP = [process_Table_Entry + 13];      //Switch To User_Stack 
+					[Return_Value] = -2;                // lseek = File_Size
 					ireturn ;
 				endif;
 
 				backup;
-				R1 = BUFFERED_READ ;//Func_Num
-				R6 = word; //Memory_Address
-				R4 = (pos_lseek % 512); //Offset_value
+				R1 = BUFFERED_READ ;                                          //Func_Num
+				R6 = word;                                                   //Memory_Address
+				R4 = (pos_lseek % 512);                                     //Offset_value
 				R3 = [INODE_TABLE + inode_Idx * 16 + 8 + (pos_lseek/512)]; //Disk_Block_Number
-				call MOD_3; //Calling FMM
+				call MOD_3;                                               //Calling FMM
 				restore;
 
-				[open_File_Table_Entry + 2] = [open_File_Table_Entry + 2] + 1;// Increment LSEEK value in Open_File_Table_Entry
-
-				//Calling Release_Inode In RMM
-
-				backup;
-				R1 = RELEASE_INODE;//Func_Num
-				R2 = currentPID;//PID
-				R4 = inode_Idx; //Inode_Index From OPEN_FILE_TABLE_Entry
-				call MOD_0; //Calling RMM
-				restore;
+				[open_File_Table_Entry + 2] = [open_File_Table_Entry + 2] + 1;// Incrementing LSEEK value in Open_File_Table_Entry
 
 			endif;
+				// *** Calling Release_Inode In RMM ***
+
+								backup;
+								R1 = RELEASE_INODE;  //Func_Num
+								R2 = currentPID;     //PID
+								R4 = inode_Idx;    //Inode_Index From OPEN_FILE_TABLE_Entry
+								call MOD_0;       //Calling RMM
+								restore;
+
+				// **** Inode_Released ****
 
 		endif;
 
@@ -154,9 +152,9 @@ endif;
 
 // ****
 
-[process_Table_Entry + 9] = 0;//Switching back tp User_Mode
-SP = [process_Table_Entry + 13]; //Switch To User_Stack 
-[Return_Value] = 0; //Success
+[process_Table_Entry + 9] = 0;     //Switching back tp User_Mode
+SP = [process_Table_Entry + 13];  //Switch To User_Stack 
+[Return_Value] = 0;              //Content Successfully Read from the file
 
 ireturn;
 
