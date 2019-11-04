@@ -1,0 +1,43 @@
+int main()
+{
+	decl	
+		int ret, fd , inc;
+		str fname , runame , uname;
+	enddecl
+
+	begin
+
+	write("Username");
+	ret = exposcall("Read", -1, uname);
+	fd = exposcall("Open", "root");
+
+	inc = 0;
+	if(fd >= 0) then
+		while(inc < 60) do
+
+			ret = exposcall("Read", fd, fname);
+			if(ret == -2) then
+				break;
+			endif;
+
+			ret = exposcall("Seek", fd, 2);
+			ret = exposcall("Read", fd, runame);
+
+			if(ret != -2 AND runame == uname) then
+				ret = exposcall("Delete", fname);
+				if(ret < 0) then
+					write("Open/Exclu");
+				endif;	
+			endif;
+
+			ret = exposcall("Seek", fd, 4);
+			inc = inc + 1;
+		endwhile;
+	else
+		write("Error");
+	endif;
+
+	return 0;
+
+	end
+}

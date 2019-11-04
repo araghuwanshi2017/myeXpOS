@@ -1,0 +1,21 @@
+int main()
+{
+	decl
+		int uid , ret;
+		str fname;
+	enddecl
+
+	begin
+		uid = 1;
+		while(uid < 16) do
+			ret = exposcall("Getuname", uid);
+			if(ret >= 0) then
+				write(ret);
+			endif;
+
+			uid = uid + 1;
+		endwhile;
+
+		return 0;
+	end 	
+}
