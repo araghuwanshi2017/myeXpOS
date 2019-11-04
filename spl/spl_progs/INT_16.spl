@@ -1,0 +1,271 @@
+// ************************** INTERRUPT 17 (MULTI_USER SYSTEM CALLS) ************************
+
+alias UserSP R0;
+alias sys_Call_Num R1;
+alias currentPID R2;
+alias uname R3; //uname_ID
+alias pwd R4;
+alias process_Table_Entry R5;
+alias User_BT R6;
+alias i R7;
+alias Return_Value R8;
+alias Remusr_Id R9;
+
+UserSP = SP;
+sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+uname = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+pwd = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
+
+
+[process_Table_Entry + 9] = sys_Call_Num;
+SP = [process_Table_Entry + 11] * 512 - 1;
+
+
+// *** Newusr_System_Call ***
+
+if(R1 == 22) then
+
+	if([process_Table_Entry + 3] != 1) then //Current_User is not Root
+			if(currentPID != 2) then
+
+				SP = UserSP;                     //User_Stack
+				[Return_Value] = -2;            //Not a Shell_Process or Root_User
+ 				[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+				ireturn ;
+
+		endif;
+	endif;
+
+	i = 0;
+	while(i < 16) do
+		User_BT = USER_TABLE;
+		if([User_BT + 2 * i] == uname) then		
+			break;
+		endif;
+		if([User_BT + 2 * i] == -1) then		
+			break;
+		endif;
+		i = i + 1;
+	endwhile;
+
+// *** User_Already_Exists ***
+	if(i != 16) then
+		if([USER_TABLE + 2 * i] == uname) then
+		
+			SP = UserSP;                     //User_Stack
+			[Return_Value] = -1;            //Exists
+			[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+			ireturn ;
+
+		endif;
+	endif;
+
+// ****
+
+// *** Free_Entry Not_Found ***
+	if(i == 16) then
+		
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -3;            //Free_Entry UA
+		[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+		ireturn ;
+	endif;
+
+// ****
+
+	encrypt pwd;
+
+	[USER_TABLE + 2 * i] = uname;    //Setting the username
+	[USER_TABLE + 2 * i + 1] = pwd; //Password
+
+
+SP = UserSP;                    //User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag
+[Return_Value] = 0;           //Success
+
+ireturn ;
+endif;
+
+// ****
+
+// *** Remusr_System_Call ***
+if(R1 == 23) then
+	
+	if([process_Table_Entry + 3] != 1) then //Current_User is not Root
+			if(currentPID != 2) then
+
+				SP = UserSP;                     //User_Stack
+				[Return_Value] = -2;            //Not a Shell_Process or Root_User
+ 				[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+				ireturn ;
+
+		endif;
+	endif;
+
+	if(uname == "root" || uname == "kernel") then
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -2;            //Root and Kernel can't be deleted
+ 		[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+		ireturn ;
+
+	endif;
+
+	i = 2;
+	while(i < 16) do	
+		if([USER_TABLE + 2 * i] == uname) then
+			break;
+		endif;
+		i = i + 1;
+	endwhile;
+
+	Remusr_Id = i;
+// *** Entry_Not_Found ***
+	if(i == 16) then
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -1;            //Entry_Not_Present
+ 		[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+		ireturn ;
+	endif;
+
+// ****
+	
+	i = 1;
+	while(i < 60) do
+		if([ROOT_FILE + i * 8 + 3] == uname) then
+			SP = UserSP;                     //User_Stack
+			[Return_Value] = -3;            //Some Files Exists with this username 
+ 			[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+			ireturn ;
+		endif;
+		i = i + 1;
+	endwhile;
+
+// *** Invalidating the User_Table Entries ***
+	[USER_TABLE + 2 * Remusr_Id] = -1;
+	[USER_TABLE + 2 * Remusr_Id + 1] = -1;
+
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+ireturn ;	
+
+endif;
+
+// ****
+
+// *** Setpwd_System_Call ***
+
+if(R1 == 24) then
+	
+	if(currentPID != 2) then
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -1;            //Not a Shell_Process
+		[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+		ireturn ;
+	endif;
+
+
+	i = 0;
+	while(i < 16) do
+		User_BT = USER_TABLE;
+		if([User_BT + 2 * i] == uname) then		
+			break;
+		endif;
+		if([User_BT + 2 * i] == -1) then		
+			break;
+		endif;
+		i = i + 1;
+	endwhile;	
+
+// *** Free_Entry Not_Found ***
+	if(i == 16) then
+		
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -2;            //Free_Entry UA
+		[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+		ireturn ;
+	endif;
+
+// ****
+
+if([process_Table_Entry + 3] != i) then
+	if([process_Table_Entry + 3] != 1) then
+
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -1;            //Only the user who sets the password allows to change the pwd except root
+		[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+		ireturn ;
+	endif;
+endif;
+
+
+encrypt pwd; //Encrypting Password
+[USER_TABLE + 2 * i + 1] = pwd;
+
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+[Return_Value] = 0;           //Success
+ireturn ;	
+	
+endif;
+
+// ****
+
+// *** Getuname_System_Call ***
+if(R1 == 25) then
+	
+	if(uname < 0 || uname > 15) then
+		SP = UserSP;                    //Setting SP equal to User_Stack
+		[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+		[Return_Value] = -1;           //Invalid User_ID failure
+		ireturn ;
+	endif;
+
+	if([USER_TABLE + 2 * uname] == -1) then
+		SP = UserSP;                    //Setting SP equal to User_Stack
+		[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+		[Return_Value] = -1;          //Invalid_Entry failure
+		ireturn ;
+	endif;
+
+	uname = [USER_TABLE + 2 * uname];
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+[Return_Value] = uname;       //Success
+ireturn ;
+
+endif;
+
+// ****
+
+// *** Getuid_System_Call ***
+if(R1 == 26) then
+	
+	i = 0;
+	while(i < 16) do
+		if([USER_TABLE + 2 * i] == uname ) then
+			break;
+		endif;
+		i = i + 1;	
+	endwhile;
+
+	if(i == 16) then
+		i = -1;
+	endif;
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+[Return_Value] = i;           //Success
+ireturn ;
+
+endif;
+
+// ****
+
+// ****************_________________****************
+

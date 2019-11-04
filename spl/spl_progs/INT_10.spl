@@ -2,21 +2,22 @@
 
 // *****************
 alias counter R0;
+alias currentPID R2;
+alias process_Table_Entry R3;
+
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
 
 breakpoint;
-// Set the Process To Terminated
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16)  + 4] = TERMINATED;
 
-// Set MODE_FLAG equal to System_Call_Number
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 10;
-
-// Switch To Kernel_Stack 
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+[process_Table_Entry + 4] = TERMINATED; // Set the Process To Terminated
+[process_Table_Entry + 9] = 10; // Set MODE_FLAG equal to System_Call_Number 
+SP = [process_Table_Entry + 11] * 512 - 1; // Switch To Kernel_Stack
 
 // *** Invoking EXIT_PROCESS ***
 	backup;
 	R1 = EXIT_PROCESS;
-	R2 = [SYSTEM_STATUS_TABLE + 1];
+	R2 = currentPID;
 	call MOD_1;
 	restore;
 

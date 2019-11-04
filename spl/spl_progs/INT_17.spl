@@ -1,0 +1,101 @@
+// ************************** INTERRUPT 17 (LOGIN SYSTEM CALL) ************************
+
+alias UserSP R0;
+alias sys_Call_Num R1;
+alias currentPID R2;
+alias uname R3;
+alias pwd R4;
+alias process_Table_Entry R5;
+alias User_BT R6;
+alias i R7;
+alias Return_Value R8;
+
+UserSP = SP;
+sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+uname = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+pwd = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
+
+
+[process_Table_Entry + 9] = sys_Call_Num;
+SP = [process_Table_Entry + 11] * 512 - 1;
+
+
+// *** Login_System_Call ***
+
+if(R1 == 27) then
+	
+	if(currentPID != 1) then
+
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -2;            //Not a Login_Process
+		[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+		ireturn ;
+	endif;
+
+	i = 0;
+	while(i < 16) do
+		User_BT = USER_TABLE;
+		if([User_BT + 2 * i] == uname) then
+			break;
+		endif;
+		i = i + 1;
+	endwhile;
+
+// *** Entry Does_Not_Exist ***
+	if(i == 16) then 
+
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -2;            //Entry_Not_Found
+		[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+		ireturn ;
+	endif;
+
+
+	encrypt pwd; //Encrypting Password
+
+	if([User_BT + 2 * i + 1] != pwd) then
+
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -2;            //Entry_Not_Found
+		[process_Table_Entry + 9] = 0; //Setting Mode_Flag
+		ireturn ;
+	endif;
+
+// ****
+
+// *** Initialization Rest of the Entries of Shell_Process ***
+
+
+	[PROCESS_TABLE + 2 * 16 + 3] = i;        //User_ID as the currently logged in User
+	[PROCESS_TABLE + 2 * 16 + 4] = CREATED; //Setting the state as CREATED;
+
+// ****
+
+
+[process_Table_Entry + 4] = WAIT_PROCESS;  // Setting State as Wait
+[process_Table_Entry + 5] = 2;            // As Login waits for shell to exit;
+
+[SYSTEM_STATUS_TABLE] = i; // Setting the User_ID corresponding to currently logged in user
+
+// *** Invoking Scheduler to Schedule some other process ***
+
+	backup;
+	call MOD_5;
+	restore;
+
+// ****
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+[Return_Value] = 0;
+ireturn ;	
+
+endif;
+
+// ****
+
+// ****************_________________****************
+

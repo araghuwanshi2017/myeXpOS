@@ -105,8 +105,9 @@ if(R1 == GET_CODE_PAGE) then
 // *** If Code_Page is loaded by Some Other Process ***
 	PTBR = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE + 1] * 20);
 	alias counter R4;
-	counter = 0;
 	alias count R5;
+	
+	counter = 0;
 	count = 0;
 	while(counter < 16) do
 		while(count < 4) do

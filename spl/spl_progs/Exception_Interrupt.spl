@@ -2,17 +2,19 @@
 // ****************************** EXCEPTION INTERRUPT HANDLER ***************************
 
 // ****************************** (FINAL VERSION) **************************
-breakpoint;
-
-//Set Mode Flag to -1 (Indicating In Exception Handler)
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = -1;
-
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 13] = SP;
-
-//Switch to Kernel Stack;
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 11] * 512 - 1;
+alias currentPID R2;
+alias process_Table_Entry R3;
 
 backup;
+breakpoint;
+
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+
+[process_Table_Entry + 9] = -1;              //Set Mode Flag to -1 (Indicating In Exception Handler)
+[process_Table_Entry + 13] = SP;            //Saving UPTR
+SP = [process_Table_Entry + 11] * 512 - 1; //Switch to Kernel Stack;
+
 
 multipush(EIP); //pushing the EIP value on the top of the kernel stack to resume execution if valid
 
@@ -21,7 +23,7 @@ if(EC != 0) then
 // *** Illegal Instruction ***
 
 	if(EC == 1) then
-		print "!!Instruction!!";
+		print "!!Illegal!!";
 	endif;
 
 // ****
@@ -37,14 +39,14 @@ if(EC != 0) then
 // *** Arithmetic Exception ***
 
 	if(EC == 3) then
-		print "!!Arithmetic!!";
+		print "!!Arith!!";
 	endif;
 
 // ****
 	backup;
-	R1 = EXIT_PROCESS; //
-	R2 = [SYSTEM_STATUS_TABLE + 1];
-	call MOD_1;
+	R1 = EXIT_PROCESS; //Func_Num
+	R2 = currentPID;   //PID
+	call MOD_1;      //Calling PMM
 	restore;
 		
 	backup;
@@ -55,7 +57,7 @@ endif;
 // *** Page_fault ***
 
 
-PTBR = PAGE_TABLE_BASE + ([SYSTEM_STATUS_TABLE + 1] * 20);
+PTBR = PAGE_TABLE_BASE + (currentPID * 20);
 
 breakpoint;	
 if(EC == 0) then
@@ -101,7 +103,7 @@ endif;
 // ****
 
 
-[PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1] * 16) + 9] = 0;
+[process_Table_Entry + 9] = 0;
 			
 multipop(EIP); // Get the EIP value from the stack;
 restore;

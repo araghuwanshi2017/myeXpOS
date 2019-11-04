@@ -2,48 +2,45 @@
 
 // ******************** (FINAL VERSION) ********************
 alias UserSP R0;
-	UserSP = SP;
-
 alias sys_Call_Num R1;
-	sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
-
 alias wait_PID R2;
-	wait_PID = [[PTBR +2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
-
 alias current_PID R3;
-	R3 = [SYSTEM_STATUS_TABLE + 1];
+alias process_Table_Entry R5;
+alias Return_Value R6;
 
-// Saving UPTR
-[PROCESS_TABLE + R3 * 16 + 13] = SP;
+UserSP = SP;
+sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+wait_PID = [[PTBR +2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+current_PID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + current_PID * 16;
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
 
-//Switch To Kernel Stack KPTR
-SP = [PROCESS_TABLE + ([SYSTEM_STATUS_TABLE + 1]) * 16 + 11] * 512 - 1;
+[process_Table_Entry + 13] = SP;            // Saving UPTR
+SP = [process_Table_Entry + 11] * 512 - 1; // Saving UPTR
+[process_Table_Entry + 9] = sys_Call_Num; // Setting  Mode_Flag Equal to System_Call_Number
 
 backup;
 
 // *** Wait_System_Call ***
 
 if(R1 == 13) then
-	
-	// Setting  Mode_Flag Equal to System_Call_Number
-	[PROCESS_TABLE + (R3 * 16) + 9] = R1;
-	if((R3 == R2) || ([PROCESS_TABLE + (R2 * 16) + 4] == TERMINATED ) || (R2 < 1 && R2 > MAX_PROC_NUM)) then
-		[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Return Value as Failure
-		[PROCESS_TABLE + R3 * 16 + 9] = 0; // Resetting Mode_Flag to 0
-		restore;
-		SP = [PROCESS_TABLE + R3 * 16 + 13]; // Switch to User_Stack 
+	if((current_PID == wait_PID) || ([process_Table_Entry + 4] == TERMINATED) || (wait_PID < 1 && wait_PID > MAX_PROC_NUM)) then
+		[Return_Value] = -1;                // Return Value as Failure
+		[process_Table_Entry + 9] = 0;     // Resetting Mode_Flag to 0
+		restore;                          //
+		SP = [process_Table_Entry + 13]; // Switch to User_Stack 
 		ireturn ;
 	endif;
 	
-	[PROCESS_TABLE + R3 * 16 + 4] = WAIT_PROCESS; //State changed to Wait
-	[PROCESS_TABLE + R3 * 16 + 5] = wait_PID; //  Current Process Waiting for wait_PID
+	[process_Table_Entry + 4] = WAIT_PROCESS; //State changed to Wait
+	[process_Table_Entry + 5] = wait_PID; //  Current Process Waiting for wait_PID
 
 	backup;
 	call MOD_5;
 	restore;
 	
-	[PROCESS_TABLE + (R3 * 16) + 9] = 0; // Resetting Mode_Flag to 0
-	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = 0; // Return Value as Success
+	[process_Table_Entry + 9] = 0; // Resetting Mode_Flag to 0
+	[Return_Value] = 0; // Return Value as Success
 	
 	restore;
 
@@ -56,8 +53,6 @@ endif;
 // ***  Signal_System_Call ***
 
 if(R1 == 14) then
-	// Setting  Mode_Flag Equal to System_Call_Number
-	[PROCESS_TABLE + (R3 * 16) + 9] = R1;
 	
 	alias i R4;
 	i = 1;
@@ -68,8 +63,8 @@ if(R1 == 14) then
 		i = i + 1;
 	endwhile;
 	
-	[PROCESS_TABLE + (R3 * 16) + 9] = 0; // Resetting Mode_Flag to 0
-	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = 0; // Return Value as Success
+	[process_Table_Entry + 9] = 0; // Resetting Mode_Flag to 0
+	[Return_Value] = 0; // Return Value as Success
 	
 	restore;
 
@@ -82,7 +77,7 @@ endif;
 // *** GetPID ***
 
 if(R1 == 11) then
-	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = R3; // Return Value as PID of the Current_Process
+	[Return_Value] = R3; // Return Value as PID of the Current_Process
 	
 	restore;
 	
@@ -96,7 +91,7 @@ endif;
 // *** GetPPID ***
 
 if(R1 == 12) then
-	[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = [PROCESS_TABLE + (R3 * 16) + 2]; // Return Value as PID of Parent_Process
+	[Return_Value] = [process_Table_Entry + 2]; // Return Value as PID of Parent_Process
 	
 	restore;
 

@@ -1,43 +1,31 @@
 //************************ INTERRUPT 4 (CREATE AND DELETE SYSTEM CALL) **************************
 
 alias UserSP R0;
-	UserSP = SP;
-
 alias sys_Call_Number R1;
-	sys_Call_Number = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
-
 alias currentPID R2;
-	currentPID = [SYSTEM_STATUS_TABLE + 1];
-
-// Saving User_Stack 
-[PROCESS_TABLE + R2 * 16 + 13] = SP;
-
-//Switch to Kernel Stack
-SP = [PROCESS_TABLE + R2 * 16 + 11] * 512 - 1;
-
 alias file_Name R3;
-		R3 = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
-
 alias inode_idx R4;
-		inode_idx = 1;	
-
 alias Permission R5;
-	Permission = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
-
 alias process_Table_Entry R6;
-	process_Table_Entry = PROCESS_TABLE + currentPID * 16;
-
 alias Return_Value R10;
-	Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
 
+UserSP = SP;
+sys_Call_Number = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+file_Name = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+inode_idx = 1;	
+Permission = [[PTBR + 2 * ((UserSP - 3)/512)] * 512 + (UserSP - 3) % 512];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
 
+[process_Table_Entry + 13] = SP;               // Saving User_Stack 
+SP = [process_Table_Entry + 11] * 512 - 1;    //Switch to Kernel Stack
+[process_Table_Entry + 9] = sys_Call_Number; // Setting Mode_Flag Equal to System_Call_Number
 
 // *** Create_System_Call ***
 
 if(R1 == 1) then
-
-// Setting Mode_Flag Equal to System_Call_Number
-	[process_Table_Entry + 9] = 1;
+	
 
 	while(inode_idx < 60) do
 		if([INODE_TABLE + inode_idx * 16 + 1] == R3) then
@@ -56,7 +44,7 @@ if(R1 == 1) then
 
 // *** No Free_Entry Available in INODE_TABLE return to User_Mode with Return_Value as -1
 	if(inode_idx == 60) then
-		[Return_Value] = -1; // No Free_Entry Available
+		[Return_Value] = -1;            // No Free_Entry Available
         [process_Table_Entry + 9] = 0; //Switching back to User_Mode 
         SP = UserSP;
 
@@ -193,12 +181,12 @@ if(R1 == 4) then
 	endif;
 
 	alias inode_Table_Entry R6;
-		inode_Table_Entry = INODE_TABLE + inode_idx * 16;
-
 	alias i R7;
+	alias buffer_Number R8;
+		
+	inode_Table_Entry = INODE_TABLE + inode_idx * 16;
 	i = 8;
 
-	alias buffer_Number R8;
 
 	while(i < 12 && [inode_Table_Entry + i] != -1) do
 		buffer_Number = ([inode_Table_Entry + i] % 4);

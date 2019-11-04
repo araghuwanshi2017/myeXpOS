@@ -1,110 +1,116 @@
 // ************************** INTERRUPT 14 (SEMAPHORE LOCK_UNLOCK SYSTEM CALL) ************************  
 
 alias UserSP R0;
-	UserSP = SP;
-
 alias Sys_Call_Num R1;
-	Sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
-
 alias current_PID R2;
-	current_PID = [SYSTEM_STATUS_TABLE + 1];
+alias process_Table_Entry R7;
+alias Return_Value R8;
 
-// Switch to Kernel_Stack
-SP = [PROCESS_TABLE + (R2 * 16) + 11] * 512 - 1;
+UserSP = SP;
+Sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+current_PID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + current_PID * 16;
+
+[process_Table_Entry + 9] = Sys_Call_Num;    //Set Mode_Flag Equal to System_Call_Number
+[process_Table_Entry + 13] = SP;            //Saving User_Stack
+SP = [process_Table_Entry + 11] * 512 - 1; //Switch to Kernel_Stack 
 
 backup;
 
 // *** Semlock_System_Call ***
 
 if(R1 == 19) then
-	// Set Mode_Flag Equal to System_Call_Number 
-	[PROCESS_TABLE + R2 * 16 + 9] = 19;
-	alias Sem_D R5;
-		Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
 	
+	alias Sem_ID R3;
 	alias Base_RT R4;
-                Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1 ) * 512 - 16;
+	alias Sem_D R5;
+		
+	Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+    Base_RT = ([process_Table_Entry + 11] + 1 ) * 512 - 16;
 
         if(Sem_D < 0 || Sem_D > 7 || [Base_RT + 2 * Sem_D] != 1) then
-                [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Invalid_Entry
-                [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
-
                 restore;
-                SP = R0;
+                SP = R0;                         //Switching to User_Stack
+                [Return_Value] = -1;            // Invalid_Entry
+                [process_Table_Entry + 9] = 0; // Resetting the Mode_Flag to 0;
+
                 ireturn ;
         endif;
 	
-	alias Sem_ID R3;
-		Sem_ID = [Base_RT + 2 * Sem_D + 1];
+	Sem_ID = [Base_RT + 2 * Sem_D + 1];
+
 	while(([SEMAPHORE_TABLE + R3 * 4] != R2) && ([SEMAPHORE_TABLE + R3 * 4] != -1)) do
-		[PROCESS_TABLE + R2 * 16 + 4] = WAIT_SEMAPHORE; // Changed the state of Current Process if the semaphore is already locked
-		[PROCESS_TABLE + R2 * 16 + 5] = R3; // Semaphore Table_Index 
+		[process_Table_Entry + 4] = WAIT_SEMAPHORE; // Changed the state of Current Process if the semaphore is already locked
+		[process_Table_Entry + 5] = R3;            // Semaphore Table_Index 
 		
 		backup;
 		call MOD_5; // Calling Scheduler to Schedule Some Other Process
 		restore;
+
 	endwhile;
 	
 	[SEMAPHORE_TABLE + R3 * 4] = R2; // Setting Locking_PID Field Equal To Current_PID
-	[PROCESS_TABLE + R2 * 16 + 9] = 0;//Switch to User_Mode
+	[process_Table_Entry + 9] = 0;  //Switch to User_Mode
 
 	restore;
 
-	[[PTBR + 2 * ((UserSP - 1)/512)] * 512+ (UserSP - 1) % 512] = 0; // Success 
+	[Return_Value] = 0; // Success 
 	SP = UserSP;
 	ireturn;
+
 endif;
 // ****
 
 // *** SemUnlock_System_Call ***
 
 if(R1 == 20) then
-	// Set Mode_Flag Equal to System_Call_Number
-        [PROCESS_TABLE + R2 * 16 + 9] = 20;
-        alias Sem_D R5;
-                Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
-
+		alias Sem_ID R3;
         alias Base_RT R4;
-                Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1) * 512 - 16;
+        alias Sem_D R5;
+		alias i R6;
+               
+        Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+		Base_RT = ([process_Table_Entry + 11] + 1) * 512 - 16;
 
         if(Sem_D < 0 || Sem_D > 7 || [Base_RT + 2 * Sem_D] != 1) then
-                [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Invalid_Entry
-                [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
-
                 restore;
-                SP = R0;
+                SP = R0;                         //Switching to User_Stack
+                [Return_Value] = -1;            //Invalid_Entry
+                [process_Table_Entry + 9] = 0; //Resetting the Mode_Flag to 0;
+
                 ireturn ;
         endif;
-	breakpoint;
-	alias Sem_ID R3;
+
+
 	Sem_ID = [Base_RT + 2 * Sem_D + 1];
 	if([SEMAPHORE_TABLE + R3 * 4] != -1) then
 		if([SEMAPHORE_TABLE + R3 * 4] != R2) then
-			[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -2; // Locked by Some Other Process
-     		        [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+            restore;
+		   	SP = R0;                             //Switching to User_Stack
+			[Return_Value] = -2;                //Locked by Some Other Process
+     		[PROCESS_TABLE + R2 * 16 + 9] = 0; //Resetting the Mode_Flag to 0;
 
-                	restore;
-                	SP = R0;
-                	ireturn ;
+	       	ireturn ;
 		endif;
 	
 		[SEMAPHORE_TABLE + R3 * 4] = -1; // Unlock the Semaphore
-		alias i R6;
 		i = 1;
+
 		while(i < 16) do
-			if(([PROCESS_TABLE + i * 16 + 4] == WAIT_SEMAPHORE) && ([PROCESS_TABLE + i * 16 + 5] == R3)) then
+			if(([PROCESS_TABLE + i * 16 + 4] == WAIT_SEMAPHORE) && ([PROCESS_TABLE + i * 16 + 5] == Sem_ID)) then
 				[PROCESS_TABLE + i * 16 + 4] = READY;
 			endif;
 			i = i + 1;
 		endwhile;
 	endif;
-		 [PROCESS_TABLE + R2 * 16 + 9] = 0;//Switch to User_Mode
 
         restore;
 
-        [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = 0; // Success
-        SP = UserSP;
+        SP = UserSP;                    //Switching To User_Stack
+        [Return_Value] = 0;            //Success
+		[process_Table_Entry + 9] = 0;//Switch to User_Mode
         ireturn;
+
 endif;
 // ****
 

@@ -20,7 +20,7 @@ SP = [process_Table_Entry + 11] * 512 - 1;   //Switching to Kernel_Stack (KPTR)
 
 // *** If Current_Process is Not Root_User ***
 	if([PROCESS_TABLE + currentPID * 16 + 3] != 1) then
-		if(currentPID != 1) then
+		if(currentPID != 2) then
 			[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1;
 			[process_Table_Entry + 9] = 0;
 			SP = UserSP;

@@ -1,0 +1,72 @@
+// ************************** INTERRUPT 12 (LOGOUT SYSTEM CALL) ************************
+
+alias UserSP R0;
+alias sys_Call_Num R1;
+alias currentPID R2;
+alias process_Table_Entry R3;
+alias i R4;
+alias Return_Value R5;
+
+
+breakpoint;
+UserSP = SP;
+sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+currentPID = [SYSTEM_STATUS_TABLE + 1];
+process_Table_Entry = PROCESS_TABLE + currentPID * 16;
+Return_Value = [PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512;
+
+
+[process_Table_Entry + 9] = sys_Call_Num;   // Setting Mode_Flag
+SP = [process_Table_Entry + 11] * 512 - 1; //Switching to Kernel_Stack 
+
+// *** Logout_System_Call ***
+if(R1 == 28) then
+	
+	if(currentPID != 2) then //Logout_System_Call Can only be executed from Shell process
+
+		SP = UserSP;                     //User_Stack
+		[Return_Value] = -1;            //Not a Shell_Process
+		[process_Table_Entry + 9] = 0; //Resetting Mode_Flag
+		ireturn ;
+
+	endif;
+
+// *** Invoking Kill_All Func in Process_Manager_Module ***
+
+	backup;	
+	R1 = KILL_ALL;    //Func_Num 
+	R2 = currentPID; //currentPID
+	call MOD_1;     //Calling PMM
+	restore;
+
+// ****
+
+//Setting State to Shell_Process to TERMINATED; 
+[process_Table_Entry + 4] = TERMINATED;
+
+// *********
+
+i = [[PTBR + 8] * 512 + 1]; //Get the IP value from the Code_Page of Shell_Program
+[[PTBR + 16] * 512] = i;   //Save the Value of IP on top of the User_Stack 
+
+//Resetting the UPTR field in PCB
+[process_Table_Entry + 13] = 4096;
+
+// *********
+
+//Waking up Login_Process
+[PROCESS_TABLE + 16 + 4] = READY;
+
+[SYSTEM_STATUS_TABLE] = 0; //Resetting the User_ID as Kernel
+
+backup;
+call MOD_5;
+restore;
+
+SP = UserSP;                    //Setting SP equal to User_Stack
+[process_Table_Entry + 9] = 0; //Resetting the Mode_Flag 
+ireturn ;
+
+endif;
+// ****
+
