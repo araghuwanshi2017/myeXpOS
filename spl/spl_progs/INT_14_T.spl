@@ -1,0 +1,189 @@
+// ************************** INTERRUPT 14 (SEMAPHORE LOCK_UNLOCK SYSTEM CALL) ************************  
+
+// ********************** Changes Made In INTERRUPT (OS_LAB_TEST) **************************
+
+alias UserSP R0;
+alias Sys_Call_Num R1;
+alias current_PID R2;
+alias counter R9;
+alias Base_Semaphore R10;
+
+UserSP = SP;
+Sys_Call_Num = [[PTBR + 2 * ((UserSP - 5)/512)] * 512 + (UserSP - 5) % 512];
+current_PID = [SYSTEM_STATUS_TABLE + 1];
+
+Base_Semaphore = 127 * 512;
+
+// Switch to Kernel_Stack
+SP = [PROCESS_TABLE + (R2 * 16) + 11] * 512 - 1;
+
+backup;
+
+// *** Semlock_System_Call ***
+
+if(R1 == 19) then
+	// Set Mode_Flag Equal to System_Call_Number 
+	[PROCESS_TABLE + R2 * 16 + 9] = 19;
+	alias Sem_D R5;
+		Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+	
+	alias Base_RT R4;
+                Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1 ) * 512 - 16;
+
+        if(Sem_D < 0 || Sem_D > 7 || [Base_RT + 2 * Sem_D] != 1) then
+                [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Invalid_Entry
+                [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+
+                restore;
+                SP = R0;
+                ireturn ;
+        endif;
+	
+	alias Sem_ID R3;
+		Sem_ID = [Base_RT + 2 * Sem_D + 1];
+
+
+	while(([SEMAPHORE_TABLE + R3 * 4] != R2) && ([SEMAPHORE_TABLE + R3 * 4] != -1)) do
+		[PROCESS_TABLE + R2 * 16 + 4] = WAIT_SEMAPHORE; // Changed the state of Current Process if the semaphore is already locked
+		[PROCESS_TABLE + R2 * 16 + 5] = R3; // Semaphore Table_Index 
+		
+		counter = 0;
+
+		Base_Semaphore = 127 * 512 + 16 * Sem_ID;
+		while(counter < 16) do
+			if([Base_Semaphore + counter] == -1) then
+				[Base_Semaphore + counter] = current_PID;
+				[PROCESS_TABLE + current_PID * 16 + 4] = WAIT_SEMAPHORE;
+				[PROCESS_TABLE + current_PID * 16 + 5] = Sem_ID;
+				break;
+			endif;
+			counter = counter + 1;
+		endwhile;
+
+		backup;
+		print "Tries_To_Lock";
+		print current_PID;
+		print "Queue";
+		restore;
+		counter = 0;
+		while(counter < 16) do
+			if([Base_Semaphore + counter] != -1) then
+				backup;
+				print [Base_Semaphore + counter];
+				restore;
+			endif;
+			counter = counter + 1;
+		endwhile;
+
+		backup;
+		call MOD_5; // Calling Scheduler to Schedule Some Other Process
+		restore;
+	endwhile;
+	
+	[SEMAPHORE_TABLE + R3 * 4] = R2;   // Setting Locking_PID Field Equal To Current_PID
+	[PROCESS_TABLE + R2 * 16 + 9] = 0;//Switch to User_Mode
+
+
+	print "Lock";
+	print [SEMAPHORE_TABLE + R3 * 4];
+	[[PTBR + 2 * ((UserSP - 1)/512)] + (UserSP - 1) % 512] = 0; // Success 
+	SP = UserSP;
+	ireturn;
+endif;
+// ****
+
+// *** SemUnlock_System_Call ***
+
+if(R1 == 20) then
+	// Set Mode_Flag Equal to System_Call_Number
+        [PROCESS_TABLE + R2 * 16 + 9] = 20;
+        alias Sem_D R5;
+                Sem_D = [[PTBR + 2 * ((UserSP - 4)/512)] * 512 + (UserSP - 4) % 512];
+
+        alias Base_RT R4;
+                Base_RT = ([PROCESS_TABLE + R2 * 16 + 11] + 1) * 512 - 16;
+
+        if(Sem_D < 0 || Sem_D > 7 || [Base_RT + 2 * Sem_D] != 1) then
+                [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -1; // Invalid_Entry
+                [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+
+                restore;
+                SP = R0;
+                ireturn ;
+        endif;
+	breakpoint;
+	alias Sem_ID R3;
+	Sem_ID = [Base_RT + 2 * Sem_D + 1];
+	if([SEMAPHORE_TABLE + R3 * 4] != -1) then
+		if([SEMAPHORE_TABLE + R3 * 4] != R2) then
+			[[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = -2; // Locked by Some Other Process
+     		        [PROCESS_TABLE + R2 * 16 + 9] = 0; // Resetting the Mode_Flag to 0;
+
+                	restore;
+                	SP = R0;
+                	ireturn ;
+		endif;
+	endif;
+	
+		[SEMAPHORE_TABLE + R3 * 4] = -1; // Unlock the Semaphore
+		alias i R6;
+		alias temp R7;
+		alias PID R8;
+		i = 1;
+		counter = 0;
+		Base_Semaphore = 127 * 512 + 16 * Sem_ID;
+
+		backup;
+		print "Unlock";
+		print current_PID;
+		restore;
+
+		if([Base_Semaphore + counter] != -1) then
+			backup;
+			print "GU";
+			print [Base_Semaphore + counter];
+			restore;
+			PID = [Base_Semaphore + counter];
+			[PROCESS_TABLE + PID * 16 + 4] = READY;
+			counter = counter + 1;
+			while([Base_Semaphore + counter] != -1) do
+				temp = [Base_Semaphore + counter];
+				[Base_Semaphore + counter - 1] = temp;
+
+				counter = counter + 1;
+			endwhile;
+
+		[Base_Semaphore + counter - 1] = -1;
+	endif;
+
+
+	backup;
+	print "Queue";
+	restore;
+		counter = 0;
+		while(counter < 16) do
+			if([Base_Semaphore + counter] != -1) then
+				backup;
+				print [Base_Semaphore + counter];
+				restore;
+			endif;
+			counter = counter + 1;
+		endwhile;
+		[PROCESS_TABLE + R2 * 16 + 9] = 0;//Switch to User_Mode
+
+        restore;
+
+        [[PTBR + 2 * ((UserSP - 1)/512)] * 512 + (UserSP - 1) % 512] = 0; // Success
+        SP = UserSP;
+        ireturn;
+endif;
+// ****
+
+		
+
+	
+	
+	
+		
+
+	
